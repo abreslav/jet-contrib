@@ -12,9 +12,9 @@ import java.util.List;
 public class Class extends Node {
   String TYPE = "class";
   final Identifier myName;
-  final List<Element> myTypeParameters;
-  final List<Type> myExtendsTypes;
-  final List<Type> myImplementsTypes;
+  private final List<Element> myTypeParameters;
+  private final List<Type> myExtendsTypes;
+  private final List<Type> myImplementsTypes;
   final List<Class> myInnerClasses;
   final List<Function> myMethods;
   final List<Field> myFields;
@@ -27,6 +27,24 @@ public class Class extends Node {
     myInnerClasses = innerClasses;
     myMethods = methods;
     myFields = fields;
+  }
+
+  private boolean hasWhere() {
+    for (Element t : myTypeParameters)
+      if (t instanceof TypeParameter && ((TypeParameter) t).hasWhere())
+        return true;
+    return false;
+  }
+
+  String typeParameterWhereToKotlin() {
+    if (hasWhere()) {
+      List<String> wheres = new LinkedList<String>();
+      for (Element t : myTypeParameters)
+        if (t instanceof TypeParameter)
+          wheres.add(((TypeParameter) t).getWhereToKotlin());
+      return SPACE + "where" + SPACE + AstUtil.join(wheres, COMMA_WITH_SPACE) + SPACE;
+    }
+    return EMPTY;
   }
 
   @NotNull
@@ -55,7 +73,10 @@ public class Class extends Node {
   @NotNull
   @Override
   public String toKotlin() {
-    return TYPE + SPACE + myName.toKotlin() + typeParametersToKotlin() + implementTypesToKotlin() + SPACE + "{" + N +
+    return TYPE + SPACE + myName.toKotlin() + typeParametersToKotlin() +
+      implementTypesToKotlin() +
+      typeParameterWhereToKotlin() +
+      SPACE + "{" + N +
       AstUtil.joinNodes(myFields, N) + N +
       AstUtil.joinNodes(methodsExceptConstructors(), N) + N +
       AstUtil.joinNodes(myInnerClasses, N) + N +

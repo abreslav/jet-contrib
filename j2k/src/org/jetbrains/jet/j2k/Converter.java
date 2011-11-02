@@ -164,6 +164,8 @@ public class Converter {
 
   @NotNull
   public static Element elementToElement(PsiElement e) {
+    if (e == null)
+      return Element.EMPTY_ELEMENT;
     final ElementVisitor elementVisitor = new ElementVisitor();
     e.accept(elementVisitor);
     System.out.println(e.getClass());
@@ -182,7 +184,7 @@ public class Converter {
   @NotNull
   public static Type typeToType(@Nullable PsiType type) {
     if (type == null)
-      return new EmptyType(); // TODO
+      return Type.EMPTY_TYPE; // TODO
     TypeVisitor typeVisitor = new TypeVisitor();
     type.accept(typeVisitor);
     return typeVisitor.getResult();
@@ -198,7 +200,7 @@ public class Converter {
   }
 
   @NotNull
-  public static List<Type> typesToNotNullableTypeList(PsiType[] types) {
+  private static List<Type> typesToNotNullableTypeList(PsiType[] types) {
     List<Type> result = new LinkedList<Type>(typesToTypeList(types));
     for (Type p : result)
       p.setNullable(false);
