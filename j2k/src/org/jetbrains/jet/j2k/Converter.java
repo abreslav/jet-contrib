@@ -6,11 +6,13 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jet.j2k.ast.*;
 import org.jetbrains.jet.j2k.ast.Class;
 import org.jetbrains.jet.j2k.ast.Enum;
+import org.jetbrains.jet.j2k.ast.Modifier;
 import org.jetbrains.jet.j2k.visitors.ElementVisitor;
 import org.jetbrains.jet.j2k.visitors.ExpressionVisitor;
 import org.jetbrains.jet.j2k.visitors.StatementVisitor;
 import org.jetbrains.jet.j2k.visitors.TypeVisitor;
 
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -65,14 +67,17 @@ public class Converter {
   }
 
   private static Field fieldToField(PsiField field) {
+    HashSet<String> modifiers = getModifiersSet(field.getModifierList());
     if (field instanceof PsiEnumConstant) // TODO: remove instanceof
       return new EnumConstant(
         new IdentifierImpl(field.getName()), // TODO
+        modifiers,
         typeToType(field.getType()),
         elementToElement(((PsiEnumConstant) field).getArgumentList())
       );
     return new Field(
       new IdentifierImpl(field.getName()), // TODO
+      modifiers,
       typeToType(field.getType()),
       expressionToExpression(field.getInitializer()) // TODO: add modifiers
     );
@@ -164,6 +169,8 @@ public class Converter {
 
   @NotNull
   public static Element elementToElement(PsiElement e) {
+    if (e == null)
+      return Element.EMPTY_ELEMENT;
     final ElementVisitor elementVisitor = new ElementVisitor();
     e.accept(elementVisitor);
     System.out.println(e.getClass());
@@ -182,7 +189,7 @@ public class Converter {
   @NotNull
   public static Type typeToType(@Nullable PsiType type) {
     if (type == null)
-      return new EmptyType(); // TODO
+      return Type.EMPTY_TYPE; // TODO
     TypeVisitor typeVisitor = new TypeVisitor();
     type.accept(typeVisitor);
     return typeVisitor.getResult();
@@ -198,7 +205,7 @@ public class Converter {
   }
 
   @NotNull
-  public static List<Type> typesToNotNullableTypeList(PsiType[] types) {
+  private static List<Type> typesToNotNullableTypeList(PsiType[] types) {
     List<Type> result = new LinkedList<Type>(typesToTypeList(types));
     for (Type p : result)
       p.setNullable(false);
@@ -250,5 +257,13 @@ public class Converter {
     if (identifier == null)
       return Identifier.EMPTY_IDENTIFIER;
     return new IdentifierImpl(identifier.getText());
+  }
+
+  public static HashSet<String> getModifiersSet(PsiModifierList modifierList) {
+    HashSet<String> modifiersSet = new HashSet<String>();
+    if (modifierList != null) {
+      if (modifierList.hasModifierProperty("final")) modifiersSet.add(Modifier.FINAL);
+    }
+    return modifiersSet;
   }
 }
