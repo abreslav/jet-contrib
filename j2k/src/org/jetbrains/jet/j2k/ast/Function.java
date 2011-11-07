@@ -5,19 +5,21 @@ import org.jetbrains.jet.j2k.util.AstUtil;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * @author ignatov
  */
-public class Function extends Node {
+public class Function extends Member {
   private final Identifier myName;
   private final Type myType;
   private final List<Element> myTypeParameters;
   final Element myParams;
-  private final Block myBlock;
+  final Block myBlock;
 
-  public Function(Identifier name, Type type, List<Element> typeParameters, Element params, Block block) {
+  public Function(Identifier name, Set<String> modifiers, Type type, List<Element> typeParameters, Element params, Block block) {
     myName = name;
+    myModifiers = modifiers;
     myType = type;
     myTypeParameters = typeParameters;
     myParams = params;
@@ -35,7 +37,7 @@ public class Function extends Node {
     return false;
   }
 
-  String typeParameterWhereToKotlin() {
+  private String typeParameterWhereToKotlin() {
     if (hasWhere()) {
       List<String> wheres = new LinkedList<String>();
       for (Element t : myTypeParameters)
@@ -46,10 +48,27 @@ public class Function extends Node {
     return EMPTY;
   }
 
+  String modifiersToKotlin() {
+    List<String> modifierList = new LinkedList<String>();
+
+    if (isAbstract())
+      modifierList.add(Modifier.ABSTRACT);
+
+    if (myModifiers.contains(Modifier.OVERRIDE))
+      modifierList.add(Modifier.OVERRIDE);
+
+    modifierList.add(accessModifier());
+
+    if (modifierList.size() > 0)
+      return AstUtil.join(modifierList, SPACE) + SPACE;
+
+    return EMPTY;
+  }
+
   @NotNull
   @Override
   public String toKotlin() {
-    return "fun" + SPACE + myName.toKotlin() + typeParametersToKotlin() + "(" + myParams.toKotlin() + ")" + SPACE + COLON +
+    return modifiersToKotlin() + "fun" + SPACE + myName.toKotlin() + typeParametersToKotlin() + "(" + myParams.toKotlin() + ")" + SPACE + COLON +
       SPACE + myType.toKotlin() + SPACE +
       typeParameterWhereToKotlin() +
       myBlock.toKotlin();

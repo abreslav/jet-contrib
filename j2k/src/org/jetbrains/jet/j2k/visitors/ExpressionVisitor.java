@@ -4,6 +4,7 @@ import com.intellij.psi.*;
 import com.intellij.psi.impl.source.tree.java.PsiLiteralExpressionImpl;
 import com.intellij.psi.tree.IElementType;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.jet.j2k.Converter;
 import org.jetbrains.jet.j2k.ast.*;
 
 import java.util.List;
@@ -47,53 +48,57 @@ public class ExpressionVisitor extends StatementVisitor implements Visitor {
 
     final IElementType tokenType = expression.getOperationSign().getTokenType();
 
-    if (tokenType == JavaTokenType.GTGTGTEQ) { // because it's transform to the method call
+    String secondOp = "";
+    if (tokenType == JavaTokenType.GTGTEQ) secondOp = "shr";
+    if (tokenType == JavaTokenType.LTLTEQ) secondOp = "shl";
+    if (tokenType == JavaTokenType.XOREQ) secondOp = "xor";
+    if (tokenType == JavaTokenType.ANDEQ) secondOp = "and";
+    if (tokenType == JavaTokenType.OREQ) secondOp = "or";
+    if (tokenType == JavaTokenType.GTGTGTEQ) secondOp = "cyclicShiftRight";
+
+    if (!secondOp.equals("")) // if not Kotlin operators
       myResult = new AssignmentExpression(
         expressionToExpression(expression.getLExpression()),
-        new DummyMethodCallExpression(
+        new BinaryExpression(
           expressionToExpression(expression.getLExpression()),
-          "cyclicShiftRight",
-          expressionToExpression(expression.getRExpression())
+          expressionToExpression(expression.getRExpression()),
+          secondOp
         ),
         "="
       );
-    } else {
-
-      String secondOp = "";
-      if (tokenType == JavaTokenType.GTGTEQ) secondOp = "shr";
-      if (tokenType == JavaTokenType.LTLTEQ) secondOp = "shl";
-      if (tokenType == JavaTokenType.XOREQ) secondOp = "xor";
-      if (tokenType == JavaTokenType.ANDEQ) secondOp = "and";
-      if (tokenType == JavaTokenType.OREQ) secondOp = "or";
-
-      if (!secondOp.equals("")) // if not Kotlin operators
-        myResult = new AssignmentExpression(
-          expressionToExpression(expression.getLExpression()),
-          new BinaryExpression(
-            expressionToExpression(expression.getLExpression()),
-            expressionToExpression(expression.getRExpression()),
-            secondOp
-          ),
-          "="
-        );
-      else
-        myResult = new AssignmentExpression(
-          expressionToExpression(expression.getLExpression()),
-          expressionToExpression(expression.getRExpression()),
-          expression.getOperationSign().getText() // TODO
-        );
-    }
+    else
+      myResult = new AssignmentExpression(
+        expressionToExpression(expression.getLExpression()),
+        expressionToExpression(expression.getRExpression()),
+        expression.getOperationSign().getText() // TODO
+      );
   }
 
-  private String getOperatorString(PsiJavaToken op) {
-    if (op.getTokenType() == JavaTokenType.GTGT) return "shr";
-    if (op.getTokenType() == JavaTokenType.LTLT) return "shl";
-    if (op.getTokenType() == JavaTokenType.XOR) return "xor";
-    if (op.getTokenType() == JavaTokenType.AND) return "and";
-    if (op.getTokenType() == JavaTokenType.OR) return "or";
-    if (op.getTokenType() == JavaTokenType.OR) return "or";
+  @NotNull
+  private String getOperatorString(@NotNull IElementType tokenType) {
+    if (tokenType == JavaTokenType.PLUS) return "+";
+    if (tokenType == JavaTokenType.MINUS) return "-";
+    if (tokenType == JavaTokenType.ASTERISK) return "*";
+    if (tokenType == JavaTokenType.DIV) return "/";
+    if (tokenType == JavaTokenType.PERC) return "%";
+    if (tokenType == JavaTokenType.GTGT) return "shr";
+    if (tokenType == JavaTokenType.LTLT) return "shl";
+    if (tokenType == JavaTokenType.XOR) return "xor";
+    if (tokenType == JavaTokenType.AND) return "and";
+    if (tokenType == JavaTokenType.OR) return "or";
+    if (tokenType == JavaTokenType.GTGTGT) return "cyclicShiftRight";
+    if (tokenType == JavaTokenType.GT) return ">";
+    if (tokenType == JavaTokenType.LT) return "<";
+    if (tokenType == JavaTokenType.GE) return ">=";
+    if (tokenType == JavaTokenType.LE) return "<=";
+    if (tokenType == JavaTokenType.NE) return "!=";
+    if (tokenType == JavaTokenType.ANDAND) return "&&";
+    if (tokenType == JavaTokenType.OROR) return "||";
+    if (tokenType == JavaTokenType.PLUSPLUS) return "++";
+    if (tokenType == JavaTokenType.MINUSMINUS) return "--";
 
-    return op.getText();
+    System.out.println("UNSUPPORTED TOKEN TYPE: " + tokenType.toString());
+    return "";
   }
 
   @Override
@@ -110,7 +115,7 @@ public class ExpressionVisitor extends StatementVisitor implements Visitor {
         new BinaryExpression(
           expressionToExpression(expression.getLOperand()),
           expressionToExpression(expression.getROperand()),
-          getOperatorString(expression.getOperationSign())
+          getOperatorString(expression.getOperationSign().getTokenType())
         );
   }
 
@@ -140,6 +145,9 @@ public class ExpressionVisitor extends StatementVisitor implements Visitor {
   @Override
   public void visitInstanceOfExpression(PsiInstanceOfExpression expression) {
     super.visitInstanceOfExpression(expression);
+    myResult = new IsOperator(
+      expressionToExpression(expression.getOperand()),
+      elementToElement(expression.getCheckType()));
   }
 
   @Override
@@ -158,7 +166,8 @@ public class ExpressionVisitor extends StatementVisitor implements Visitor {
     myResult = // TODO: not resolved
       new MethodCallExpression(
         expressionToExpression(expression.getMethodExpression()),
-        elementToElement(expression.getArgumentList())
+        elementToElement(expression.getArgumentList()),
+        typeToType(expression.getType()).isNullable()
       );
   }
 
@@ -184,7 +193,10 @@ public class ExpressionVisitor extends StatementVisitor implements Visitor {
     } else {
       myResult = new NewClassExpression(
         elementToElement(expression.getClassOrAnonymousClassReference()),
-        elementToElement(expression.getArgumentList())
+        elementToElement(expression.getArgumentList()),
+        expression.getAnonymousClass() != null?
+          anonymousClassToAnonymousClass(expression.getAnonymousClass()) :
+          null
       );
     }
   }
@@ -200,13 +212,8 @@ public class ExpressionVisitor extends StatementVisitor implements Visitor {
   @Override
   public void visitPostfixExpression(PsiPostfixExpression expression) {
     super.visitPostfixExpression(expression);
-
-    String op = "";
-    if (expression.getOperationSign().getTokenType() == JavaTokenType.PLUSPLUS) op = "++";
-    if (expression.getOperationSign().getTokenType() == JavaTokenType.MINUSMINUS) op = "--";
-
     myResult = new PostfixOperator(
-      op,
+      getOperatorString(expression.getOperationSign().getTokenType()),
       expressionToExpression(expression.getOperand())
     );
   }
@@ -214,17 +221,26 @@ public class ExpressionVisitor extends StatementVisitor implements Visitor {
   @Override
   public void visitPrefixExpression(PsiPrefixExpression expression) {
     super.visitPrefixExpression(expression);
+    myResult = new PrefixOperator(
+      getOperatorString(expression.getOperationSign().getTokenType()),
+      expressionToExpression(expression.getOperand())
+    );
   }
 
   @Override
   public void visitReferenceExpression(PsiReferenceExpression expression) {
     super.visitReferenceExpression(expression);
-    myResult = new IdentifierImpl(expression.getQualifiedName()); // TODO
+    boolean isNullable = typeToType(expression.getType()).isNullable();
+    myResult = new CallChainExpression(
+      expressionToExpression(expression.getQualifierExpression()),
+      new IdentifierImpl(expression.getReferenceName(), isNullable) // TODO: if type exists so id is nullable
+    );
   }
 
   @Override
   public void visitSuperExpression(PsiSuperExpression expression) {
     super.visitSuperExpression(expression);
+    myResult = new SuperExpression(typeToNotNullableType(expression.getType()));
   }
 
   @Override
@@ -248,5 +264,9 @@ public class ExpressionVisitor extends StatementVisitor implements Visitor {
   @Override
   public void visitPolyadicExpression(PsiPolyadicExpression expression) {
     super.visitPolyadicExpression(expression);
+    myResult = new PolyadicExpression(
+      expressionsToExpressionList(expression.getOperands()),
+      getOperatorString(expression.getOperationTokenType())
+    );
   }
 }

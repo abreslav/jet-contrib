@@ -15,6 +15,7 @@ import org.jetbrains.jet.j2k.visitors.TypeVisitor;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * @author ignatov
@@ -38,24 +39,52 @@ public class Converter {
     return result;
   }
 
-  private static Class classToClass(PsiClass psiClass) {
-    final List<Function> methods = methodsToFunctionList(psiClass.getMethods(), true);
+  public static AnonymousClass anonymousClassToAnonymousClass(PsiAnonymousClass anonymousClass) { // TODO: replace by Block,
+                                                                                                  // use class.getChild() method
+    return new AnonymousClass(
+      classesToClassList(anonymousClass.getAllInnerClasses()),
+      methodsToFunctionList(anonymousClass.getMethods(), true),
+      fieldsToFieldList(anonymousClass.getAllFields())
+    );
+  }
+
+  public static Class classToClass(PsiClass psiClass) {
+    final Set<String> modifiers = modifiersListToModifiersSet(psiClass.getModifierList());
     final List<Class> innerClasses = classesToClassList(psiClass.getAllInnerClasses());
+    final List<Function> methods = methodsToFunctionList(psiClass.getMethods(), true);
     final List<Field> fields = fieldsToFieldList(psiClass.getAllFields());
     final List<Element> typeParameters = elementsToElementList(psiClass.getTypeParameters());
     final List<Type> implementsTypes = typesToNotNullableTypeList(psiClass.getImplementsListTypes());
-    final List<PsiClassType> extendsListTypes = new LinkedList<PsiClassType>();
-    for (PsiClassType e : psiClass.getExtendsListTypes())
-      if (!e.getCanonicalText().equals("java.lang.Enum"))
-        extendsListTypes.add(e);
-    final List<Type> extendsTypes = typesToNotNullableTypeList(extendsListTypes.toArray(new PsiType[extendsListTypes.size()]));
+    final List<Type> extendsTypes = typesToNotNullableTypeList(psiClass.getExtendsListTypes());
 
     final IdentifierImpl name = new IdentifierImpl(psiClass.getName());
     if (psiClass.isInterface())
-      return new Trait(name, typeParameters, extendsTypes, implementsTypes, innerClasses, methods, fields);
+      return new Trait(name, modifiers, typeParameters, extendsTypes, implementsTypes, innerClasses, methods, fields);
     if (psiClass.isEnum())
-      return new Enum(name, typeParameters, extendsTypes, implementsTypes, innerClasses, methods, fields);
-    return new Class(name, typeParameters, extendsTypes, implementsTypes, innerClasses, methods, fields);
+      return new Enum(name, modifiers, typeParameters, new LinkedList<Type>(), implementsTypes,
+        innerClasses, methods, fieldsToFieldListForEnums(psiClass.getAllFields()));
+    return new Class(name, modifiers, typeParameters, extendsTypes, implementsTypes, innerClasses, methods, fields);
+  }
+
+  // TODO: hack for enums
+  private static List<Field> fieldsToFieldListForEnums(PsiField[] fields) {
+    List<Field> result = new LinkedList<Field>();
+    for (PsiField f : fields) {
+      if ((f.getName().equals("ordinal")
+        && f.getType().getCanonicalText().equals("int")
+        && f.hasModifierProperty(PsiModifier.PRIVATE)
+        && f.hasModifierProperty(PsiModifier.FINAL)
+      ) ||
+        (f.getName().equals("name")
+          && f.getType().getCanonicalText().equals("java.lang.String")
+          && f.hasModifierProperty(PsiModifier.PRIVATE)
+          && f.hasModifierProperty(PsiModifier.FINAL)
+        ))
+        continue;
+
+      result.add(fieldToField(f));
+    }
+    return result;
   }
 
   private static List<Field> fieldsToFieldList(PsiField[] fields) {
@@ -67,7 +96,7 @@ public class Converter {
   }
 
   private static Field fieldToField(PsiField field) {
-    HashSet<String> modifiers = getModifiersSet(field.getModifierList());
+    Set<String> modifiers = modifiersListToModifiersSet(field.getModifierList());
     if (field instanceof PsiEnumConstant) // TODO: remove instanceof
       return new EnumConstant(
         new IdentifierImpl(field.getName()), // TODO
@@ -100,9 +129,16 @@ public class Converter {
     final Element params = elementToElement(method.getParameterList());
     final List<Element> typeParameters = elementsToElementList(method.getTypeParameters());
 
+    final Set<String> modifiers = modifiersListToModifiersSet(method.getModifierList());
+    if (method.getHierarchicalMethodSignature().getSuperSignatures().size() > 0)
+      modifiers.add(Modifier.OVERRIDE);
+    if (method.getParent() instanceof PsiClass && ((PsiClass) method.getParent()).isInterface())
+      modifiers.remove(Modifier.ABSTRACT);
+
     if (method.isConstructor())
       return new Constructor(
         identifier,
+        modifiers,
         type,
         typeParameters,
         params,
@@ -110,6 +146,7 @@ public class Converter {
       );
     return new Function(
       identifier,
+      modifiers,
       type,
       typeParameters,
       params,
@@ -144,7 +181,6 @@ public class Converter {
       return Statement.EMPTY_STATEMENT;
     final StatementVisitor statementVisitor = new StatementVisitor();
     s.accept(statementVisitor);
-    System.out.println(s.getClass());
     return statementVisitor.getResult();
   }
 
@@ -163,7 +199,6 @@ public class Converter {
       return Expression.EMPTY_EXPRESSION;
     final ExpressionVisitor expressionVisitor = new ExpressionVisitor();
     e.accept(expressionVisitor);
-    System.out.println(e.getClass());
     return expressionVisitor.getResult();
   }
 
@@ -173,7 +208,6 @@ public class Converter {
       return Element.EMPTY_ELEMENT;
     final ElementVisitor elementVisitor = new ElementVisitor();
     e.accept(elementVisitor);
-    System.out.println(e.getClass());
     return elementVisitor.getResult();
   }
 
@@ -230,7 +264,7 @@ public class Converter {
 
   @NotNull
   private static Import importToImport(PsiImportStatementBase t) {
-    if (t.getImportReference() != null)
+    if (t != null && t.getImportReference() != null)
       return new Import(t.getImportReference().getQualifiedName()); // TODO: use identifier
     return new Import("");
   }
@@ -259,10 +293,16 @@ public class Converter {
     return new IdentifierImpl(identifier.getText());
   }
 
-  public static HashSet<String> getModifiersSet(PsiModifierList modifierList) {
+  public static Set<String> modifiersListToModifiersSet(PsiModifierList modifierList) {
     HashSet<String> modifiersSet = new HashSet<String>();
     if (modifierList != null) {
-      if (modifierList.hasModifierProperty("final")) modifiersSet.add(Modifier.FINAL);
+      if (modifierList.hasModifierProperty(PsiModifier.ABSTRACT)) modifiersSet.add(Modifier.ABSTRACT);
+      if (modifierList.hasModifierProperty(PsiModifier.FINAL)) modifiersSet.add(Modifier.FINAL);
+      if (modifierList.hasModifierProperty(PsiModifier.STATIC)) modifiersSet.add(Modifier.STATIC);
+      if (modifierList.hasModifierProperty(PsiModifier.PUBLIC)) modifiersSet.add(Modifier.PUBLIC);
+      if (modifierList.hasModifierProperty(PsiModifier.PROTECTED)) modifiersSet.add(Modifier.PROTECTED);
+      if (modifierList.hasModifierProperty(PsiModifier.PACKAGE_LOCAL)) modifiersSet.add(Modifier.INTERNAL);
+      if (modifierList.hasModifierProperty(PsiModifier.PRIVATE)) modifiersSet.add(Modifier.PRIVATE);
     }
     return modifiersSet;
   }
