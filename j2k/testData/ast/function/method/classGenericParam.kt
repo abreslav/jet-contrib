@@ -1,0 +1,2 @@
+open fun getT() : T? {
+}

@@ -1,0 +1,2 @@
+open fun main() : String? {
+}

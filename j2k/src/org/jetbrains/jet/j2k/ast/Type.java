@@ -7,7 +7,7 @@ import org.jetbrains.annotations.NotNull;
  */
 public abstract class Type extends Element {
   public static final Type EMPTY_TYPE = new EmptyType();
-  private boolean myNullable = true;
+  boolean myNullable = true;
 
   @NotNull
   @Override
@@ -19,7 +19,7 @@ public abstract class Type extends Element {
     myNullable = nullable;
   }
 
-  boolean isNullable() {
+  public boolean isNullable() {
     return myNullable;
   }
 
@@ -35,6 +35,11 @@ public abstract class Type extends Element {
     @Override
     public String toKotlin() {
       return "UNRESOLVED_TYPE";
+    }
+
+    @Override
+    public boolean isNullable() {
+      return false;
     }
   }
 }
