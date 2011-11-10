@@ -14,11 +14,12 @@ public class Trait extends Class {
     TYPE = "trait";
   }
 
-  boolean needOpenModifier() {
-    return false;
+  @Override
+  String primaryConstructorSignatureToKotlin() {
+    return EMPTY;
   }
 
-  boolean needAbstractModifier() {
+  boolean needOpenModifier() {
     return false;
   }
 }

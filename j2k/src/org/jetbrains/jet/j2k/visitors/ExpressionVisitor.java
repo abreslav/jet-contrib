@@ -91,6 +91,7 @@ public class ExpressionVisitor extends StatementVisitor implements Visitor {
     if (tokenType == JavaTokenType.LT) return "<";
     if (tokenType == JavaTokenType.GE) return ">=";
     if (tokenType == JavaTokenType.LE) return "<=";
+    if (tokenType == JavaTokenType.EQEQ) return "==";
     if (tokenType == JavaTokenType.NE) return "!=";
     if (tokenType == JavaTokenType.ANDAND) return "&&";
     if (tokenType == JavaTokenType.OROR) return "||";
@@ -190,14 +191,21 @@ public class ExpressionVisitor extends StatementVisitor implements Visitor {
         typeToType(expression.getType()), // TODO: remove
         new ExpressionList(callExpression)
       );
-    } else {
+    } else { // new Class(): common case
       myResult = new NewClassExpression(
         elementToElement(expression.getClassOrAnonymousClassReference()),
         elementToElement(expression.getArgumentList()),
-        expression.getAnonymousClass() != null?
+        expression.getAnonymousClass() != null ?
           anonymousClassToAnonymousClass(expression.getAnonymousClass()) :
           null
       );
+      // is constructor secondary
+      final PsiMethod constructor = expression.resolveMethod();
+      if (constructor != null && !isConstructorPrimary(constructor)) {
+        myResult = new CallChainExpression(
+          new IdentifierImpl(constructor.getName(), false),
+          new MethodCallExpression(new IdentifierImpl("init"), elementToElement(expression.getArgumentList()), false));
+      }
     }
   }
 
@@ -230,22 +238,113 @@ public class ExpressionVisitor extends StatementVisitor implements Visitor {
   @Override
   public void visitReferenceExpression(PsiReferenceExpression expression) {
     super.visitReferenceExpression(expression);
-    boolean isNullable = typeToType(expression.getType()).isNullable();
+
+    final boolean isFieldReference = isFieldReference(expression);
+    final boolean hasDollar = isFieldReference && isInsidePrimaryConstructor(expression);
+    final boolean insideSecondaryConstructor = isInsideSecondaryConstructor(expression);
+    final boolean hasReceiver = isFieldReference && insideSecondaryConstructor;
+    final boolean isThis = isThisExpression(expression);
+    final boolean isNullable = typeToType(expression.getType()).isNullable();
+    final String className = getClassName(expression);
+
+    Expression identifier = new IdentifierImpl(expression.getReferenceName(), isNullable);
+
+    if (hasDollar)
+      identifier = new IdentifierImpl(expression.getReferenceName(), hasDollar, isNullable);
+    else {
+      final String temporaryObject = "__";
+      if (hasReceiver)
+        identifier = new CallChainExpression(new IdentifierImpl(temporaryObject, false), new IdentifierImpl(expression.getReferenceName(), isNullable));
+      else if (insideSecondaryConstructor && isThis)
+        identifier = new IdentifierImpl("val " + temporaryObject + " = " + className); // TODO: hack
+    }
+
     myResult = new CallChainExpression(
       expressionToExpression(expression.getQualifierExpression()),
-      new IdentifierImpl(expression.getReferenceName(), isNullable) // TODO: if type exists so id is nullable
+      identifier // TODO: if type exists so identifier is nullable
     );
+  }
+
+  @NotNull
+  private String getClassName(PsiReferenceExpression expression) {
+    PsiElement context = expression.getContext();
+    while (context != null) {
+      if (context instanceof PsiMethod && ((PsiMethod) context).isConstructor()) {
+        final PsiClass containingClass = ((PsiMethod) context).getContainingClass();
+        if (containingClass != null) {
+          final PsiIdentifier identifier = containingClass.getNameIdentifier();
+          if (identifier != null)
+            return identifier.getText();
+        }
+      }
+      context = context.getContext();
+    }
+    return "";
+  }
+
+  private boolean isFieldReference(PsiReferenceExpression expression) {
+    final PsiReference reference = expression.getReference();
+    if (reference != null) {
+      final PsiElement resolvedReference = reference.resolve();
+      if (resolvedReference != null) {
+        if (resolvedReference instanceof PsiField) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private boolean isInsideSecondaryConstructor(PsiReferenceExpression expression) {
+    PsiElement context = expression.getContext();
+    while (context != null) {
+      if (context instanceof PsiMethod && ((PsiMethod) context).isConstructor())
+        return !Converter.isConstructorPrimary((PsiMethod) context);
+      context = context.getContext();
+    }
+    return false;
+  }
+
+  private boolean isInsidePrimaryConstructor(PsiReferenceExpression expression) {
+    PsiElement context = expression.getContext();
+    while (context != null) {
+      if (context instanceof PsiMethod && ((PsiMethod) context).isConstructor())
+        return Converter.isConstructorPrimary((PsiMethod) context);
+      context = context.getContext();
+    }
+    return false;
+  }
+
+  private boolean isThisExpression(PsiReferenceExpression expression) {
+    for (PsiReference r : expression.getReferences())
+      if (r.getCanonicalText().equals("this")) {
+        final PsiElement res = r.resolve();
+        if (res != null && res instanceof PsiMethod && ((PsiMethod) res).isConstructor())
+          return true;
+      }
+    return false;
   }
 
   @Override
   public void visitSuperExpression(PsiSuperExpression expression) {
     super.visitSuperExpression(expression);
-    myResult = new SuperExpression(typeToNotNullableType(expression.getType()));
+    final PsiJavaCodeReferenceElement qualifier = expression.getQualifier();
+    myResult = new SuperExpression(
+      qualifier != null ?
+        new IdentifierImpl(qualifier.getQualifiedName()) :
+        Identifier.EMPTY_IDENTIFIER
+    );
   }
 
   @Override
   public void visitThisExpression(PsiThisExpression expression) {
     super.visitThisExpression(expression);
+    final PsiJavaCodeReferenceElement qualifier = expression.getQualifier();
+    myResult = new ThisExpression(
+      qualifier != null ?
+        new IdentifierImpl(qualifier.getQualifiedName()) :
+        Identifier.EMPTY_IDENTIFIER
+    );
   }
 
   @Override

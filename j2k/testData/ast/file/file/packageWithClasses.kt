@@ -1,6 +1,4 @@
-namespace {
-class A {
+class A() {
 }
-class B {
-}
+class B() {
 }

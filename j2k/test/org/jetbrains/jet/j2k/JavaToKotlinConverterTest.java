@@ -44,13 +44,21 @@ public class JavaToKotlinConverterTest extends LightDaemonAnalyzerTestCase {
     if (javaFile.getParent().endsWith("/expression")) actual = expressionToKotlin(javaCode);
     else if (javaFile.getParent().endsWith("/statement")) actual = statementToKotlin(javaCode);
     else if (javaFile.getParent().endsWith("/method")) actual = methodToKotlin(javaCode);
-    else if (javaFile.getParent().endsWith("/class")) actual = classToKotlin(javaCode);
+    else if (javaFile.getParent().endsWith("/class")) actual = fileToKotlin(javaCode);
     else if (javaFile.getParent().endsWith("/file")) actual = fileToKotlin(javaCode);
 
-    assert !actual.equals("");
-    if (!expected.equals(actual))
-      writeStringToFile(new File(kotlinPath + ".tmp"), actual);
+    assert !actual.equals("") : "Specify what is it: file, class, method, statement or expression";
+
+    final File tmp = new File(kotlinPath + ".tmp");
+    if (!expected.equals(actual)) writeStringToFile(tmp, actual);
+    if (expected.equals(actual) && tmp.exists()) tmp.delete();
+
     Assert.assertEquals(expected, actual);
+  }
+
+  @Override
+  protected void setUp() throws Exception {
+    super.setUp();
   }
 
   @NotNull
@@ -92,26 +100,16 @@ public class JavaToKotlinConverterTest extends LightDaemonAnalyzerTestCase {
     configureFromFileText("test.java", text);
   }
 
+  @NotNull
   protected String fileToKotlin(String text) throws IOException {
     configureFromText(text);
     return prettify(Converter.fileToFile((PsiJavaFile) myFile).toKotlin());
   }
 
   @NotNull
-  protected String classToKotlin(String text) throws IOException {
-    configureFromText(text);
-
-    PsiJavaFile javaFile = (PsiJavaFile) myFile;
-
-    String result = prettify(Converter.fileToFile(javaFile).toKotlin()).replaceAll("namespace \\{", "");
-    result = result.substring(0, result.lastIndexOf("}"));
-    return prettify(result);
-  }
-
-  @NotNull
   protected String methodToKotlin(String text) throws IOException {
-    String result = classToKotlin("final class C {" + text + "}")
-      .replaceAll("class C \\{", "");
+    String result = fileToKotlin("final class C {" + text + "}")
+      .replaceAll("class C\\(\\) \\{", "");
     result = result.substring(0, result.lastIndexOf("}"));
     return prettify(result);
   }
@@ -120,7 +118,7 @@ public class JavaToKotlinConverterTest extends LightDaemonAnalyzerTestCase {
   protected String statementToKotlin(String text) throws Exception {
     String result = methodToKotlin("void main() {" + text + "}");
     int pos = result.lastIndexOf("}");
-    result = result.substring(0, pos).replaceFirst("fun main\\(\\) : Unit \\{", "");
+    result = result.substring(0, pos).replaceFirst("open fun main\\(\\) : Unit \\{", "");
     return prettify(result);
   }
 
@@ -138,8 +136,9 @@ public class JavaToKotlinConverterTest extends LightDaemonAnalyzerTestCase {
     return code
       .trim()
       .replaceAll("\r\n", "\n")
-      .replaceAll("\n+", "\n")
+      .replaceAll(" \n", "\n")
       .replaceAll("\n ", "\n")
+      .replaceAll("\n+", "\n")
       .replaceAll(" +", " ")
       .trim()
       ;

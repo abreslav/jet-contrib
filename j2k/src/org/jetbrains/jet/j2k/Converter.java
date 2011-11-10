@@ -7,10 +7,7 @@ import org.jetbrains.jet.j2k.ast.*;
 import org.jetbrains.jet.j2k.ast.Class;
 import org.jetbrains.jet.j2k.ast.Enum;
 import org.jetbrains.jet.j2k.ast.Modifier;
-import org.jetbrains.jet.j2k.visitors.ElementVisitor;
-import org.jetbrains.jet.j2k.visitors.ExpressionVisitor;
-import org.jetbrains.jet.j2k.visitors.StatementVisitor;
-import org.jetbrains.jet.j2k.visitors.TypeVisitor;
+import org.jetbrains.jet.j2k.visitors.*;
 
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -40,7 +37,7 @@ public class Converter {
   }
 
   public static AnonymousClass anonymousClassToAnonymousClass(PsiAnonymousClass anonymousClass) { // TODO: replace by Block,
-                                                                                                  // use class.getChild() method
+    // use class.getChild() method
     return new AnonymousClass(
       classesToClassList(anonymousClass.getAllInnerClasses()),
       methodsToFunctionList(anonymousClass.getMethods(), true),
@@ -121,6 +118,29 @@ public class Converter {
     return result;
   }
 
+  @Nullable
+  public static PsiMethod getPrimaryConstructor(PsiClass psiClass) {
+    ThisVisitor tv = new ThisVisitor();
+    psiClass.accept(tv);
+    return tv.getPrimaryConstructor();
+  }
+
+  public static boolean isConstructorPrimary(@Nullable PsiMethod constructor) {
+    if (constructor == null)
+      return false;
+    if (constructor.getParent() instanceof PsiClass) {
+      final PsiClass parent = (PsiClass) constructor.getParent();
+      if (parent.getConstructors().length == 1)
+        return true;
+      else {
+        PsiMethod c = getPrimaryConstructor(parent); // TODO: move up to classToClass() method
+        if (c != null && c.hashCode() == constructor.hashCode())
+          return true;
+      }
+    }
+    return false;
+  }
+
   @NotNull
   private static Function methodToFunction(PsiMethod method, boolean notEmpty) {
     final IdentifierImpl identifier = new IdentifierImpl(method.getName());
@@ -135,15 +155,19 @@ public class Converter {
     if (method.getParent() instanceof PsiClass && ((PsiClass) method.getParent()).isInterface())
       modifiers.remove(Modifier.ABSTRACT);
 
-    if (method.isConstructor())
+    if (method.isConstructor()) { // TODO: simplify
+      boolean isPrimary = isConstructorPrimary(method);
+
       return new Constructor(
         identifier,
         modifiers,
         type,
         typeParameters,
         params,
-        body
+        body,
+        isPrimary
       );
+    }
     return new Function(
       identifier,
       modifiers,
@@ -296,13 +320,13 @@ public class Converter {
   public static Set<String> modifiersListToModifiersSet(PsiModifierList modifierList) {
     HashSet<String> modifiersSet = new HashSet<String>();
     if (modifierList != null) {
-      if (modifierList.hasModifierProperty(PsiModifier.ABSTRACT)) modifiersSet.add(Modifier.ABSTRACT);
+      if (modifierList.hasExplicitModifier(PsiModifier.ABSTRACT)) modifiersSet.add(Modifier.ABSTRACT);
       if (modifierList.hasModifierProperty(PsiModifier.FINAL)) modifiersSet.add(Modifier.FINAL);
       if (modifierList.hasModifierProperty(PsiModifier.STATIC)) modifiersSet.add(Modifier.STATIC);
-      if (modifierList.hasModifierProperty(PsiModifier.PUBLIC)) modifiersSet.add(Modifier.PUBLIC);
-      if (modifierList.hasModifierProperty(PsiModifier.PROTECTED)) modifiersSet.add(Modifier.PROTECTED);
-      if (modifierList.hasModifierProperty(PsiModifier.PACKAGE_LOCAL)) modifiersSet.add(Modifier.INTERNAL);
-      if (modifierList.hasModifierProperty(PsiModifier.PRIVATE)) modifiersSet.add(Modifier.PRIVATE);
+      if (modifierList.hasExplicitModifier(PsiModifier.PUBLIC)) modifiersSet.add(Modifier.PUBLIC);
+      if (modifierList.hasExplicitModifier(PsiModifier.PROTECTED)) modifiersSet.add(Modifier.PROTECTED);
+      if (modifierList.hasExplicitModifier(PsiModifier.PACKAGE_LOCAL)) modifiersSet.add(Modifier.INTERNAL);
+      if (modifierList.hasExplicitModifier(PsiModifier.PRIVATE)) modifiersSet.add(Modifier.PRIVATE);
     }
     return modifiersSet;
   }

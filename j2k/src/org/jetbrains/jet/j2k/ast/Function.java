@@ -26,6 +26,18 @@ public class Function extends Member {
     myBlock = block;
   }
 
+  public List<Element> getTypeParameters() {
+    return myTypeParameters;
+  }
+
+  public Element getParams() {
+    return myParams;
+  }
+
+  public Block getBlock() {
+    return myBlock;
+  }
+
   private String typeParametersToKotlin() {
     return myTypeParameters.size() > 0 ? "<" + AstUtil.joinNodes(myTypeParameters, COMMA_WITH_SPACE) + ">" : EMPTY;
   }
@@ -56,6 +68,9 @@ public class Function extends Member {
 
     if (myModifiers.contains(Modifier.OVERRIDE))
       modifierList.add(Modifier.OVERRIDE);
+
+    if (!myModifiers.contains(Modifier.OVERRIDE) && !myModifiers.contains(Modifier.FINAL))
+      modifierList.add(Modifier.OPEN);
 
     modifierList.add(accessModifier());
 
