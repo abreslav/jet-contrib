@@ -1,6 +1,7 @@
 package org.jetbrains.jet.j2k.visitors;
 
 import com.intellij.psi.*;
+import com.intellij.psi.impl.source.PsiClassReferenceType;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.jet.j2k.ast.*;
 import org.jetbrains.jet.j2k.util.AstUtil;
@@ -42,8 +43,24 @@ public class TypeVisitor extends PsiTypeVisitor<Type> {
 
   @Override
   public Type visitClassType(PsiClassType classType) {
+    String classTypeName = getClassTypeName(classType);
+
+    if (classType instanceof PsiClassReferenceType) { // TODO: simplify
+      final PsiJavaCodeReferenceElement reference = ((PsiClassReferenceType) classType).getReference();
+      if (reference.isQualified()) {
+        String result = new IdentifierImpl(reference.getReferenceName()).toKotlin();
+        PsiElement qualifier = reference.getQualifier();
+        while (qualifier != null) {
+          final PsiJavaCodeReferenceElement p = (PsiJavaCodeReferenceElement) qualifier;
+          result = new IdentifierImpl(p.getReferenceName()).toKotlin() + "." + result; // TODO: maybe need to replace by safe call?
+          qualifier = p.getQualifier();
+        }
+        classTypeName = result;
+      }
+    }
+
     myResult = new ClassType(
-      new IdentifierImpl(getClassTypeName(classType)),
+      new IdentifierImpl(classTypeName),
       typesToTypeList(classType.getParameters())
     );
     return super.visitClassType(classType);

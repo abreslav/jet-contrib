@@ -170,7 +170,8 @@ public class ExpressionVisitor extends StatementVisitor {
         new MethodCallExpression(
           expressionToExpression(expression.getMethodExpression()),
           elementToElement(expression.getArgumentList()),
-          typeToType(expression.getType()).isNullable()
+          typeToType(expression.getType()).isNullable(),
+          typesToTypeList(expression.getTypeArguments())
         );
   }
 
@@ -196,6 +197,7 @@ public class ExpressionVisitor extends StatementVisitor {
     } else { // new Class(): common case
       final PsiAnonymousClass anonymousClass = expression.getAnonymousClass();
       myResult = new NewClassExpression(
+        expressionToExpression(expression.getQualifier()),
         elementToElement(expression.getClassOrAnonymousClassReference()),
         elementToElement(expression.getArgumentList()),
         anonymousClass != null ? anonymousClassToAnonymousClass(anonymousClass) : null
@@ -205,7 +207,7 @@ public class ExpressionVisitor extends StatementVisitor {
       if (constructor != null && !isConstructorPrimary(constructor)) {
         myResult = new CallChainExpression(
           new IdentifierImpl(constructor.getName(), false),
-          new MethodCallExpression(new IdentifierImpl("init"), elementToElement(expression.getArgumentList()), false));
+          new MethodCallExpression(new IdentifierImpl("init"), elementToElement(expression.getArgumentList()), false, typesToTypeList(expression.getTypeArguments())));
       }
     }
   }
