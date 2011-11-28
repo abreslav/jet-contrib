@@ -458,6 +458,8 @@ fun Byte.or(other : Byte?) : Byte { return this.or(other).byt }
 
 // String
 fun <T> T.plus(str: String?) : String { return this.toString() + str }
+fun String.lastIndexOf(s: String) : Int { return (this as java.lang.String).lastIndexOf(s) }
+fun String.lastIndexOf(s: Char) : Int { return (this as java.lang.String).lastIndexOf(s.toString()) }
 fun String.replaceAll(s: String, s1 : String) : String { return (this as java.lang.String).replaceAll(s, s1) as String }
 fun String.trim() : String { return (this as java.lang.String).trim() as String }
 fun String.format(s : String, vararg objects : Any?) : String { return java.lang.String.format(s, objects) as String }
