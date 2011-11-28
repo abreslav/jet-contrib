@@ -76,6 +76,8 @@ public class KotlinLibTest extends TranslationTest {
                 new RhinoPropertyTypesChecker("foo", propertyToType));
     }
 
+    //
+    // TODO:Refactor calls to function result checker with test
     @Test
     public void namespaceHasDeclaredFunction() throws Exception {
         runRhinoTest(Arrays.asList(kotlinLibraryPath(), cases("namespace.js")),
@@ -107,5 +109,16 @@ public class KotlinLibTest extends TranslationTest {
                 new RhinoFunctionResultChecker("test", true));
     }
 
+    @Test
+    public void commaExpression() throws Exception {
+        runRhinoTest(Arrays.asList(kotlinLibraryPath(), cases("commaExpression.js")),
+                new RhinoFunctionResultChecker("test", true));
+    }
+
+    @Test
+    public void array() throws Exception {
+        runRhinoTest(Arrays.asList(kotlinLibraryPath(), cases("array.js")),
+                new RhinoFunctionResultChecker("test", true));
+    }
 
 }

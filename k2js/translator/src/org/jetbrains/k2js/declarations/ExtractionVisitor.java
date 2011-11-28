@@ -5,7 +5,7 @@ import com.google.dart.compiler.backend.js.ast.JsScope;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jet.lang.descriptors.*;
-import org.jetbrains.k2js.translate.Namer;
+import org.jetbrains.k2js.translate.utils.Namer;
 
 /**
  * @author Talanov Pavel
@@ -100,11 +100,24 @@ public final class ExtractionVisitor extends DeclarationDescriptorVisitor<Void, 
     @NotNull
     private JsScope extractNamespaceDeclaration(@NotNull NamespaceDescriptor descriptor,
                                                 @NotNull JsScope enclosingScope) {
+        JsName name;
         String namespaceName = descriptor.getName();
-        declarations.putName(descriptor, enclosingScope.declareName(namespaceName));
+        name = getNameForNamespace(enclosingScope, namespaceName);
+        declarations.putName(descriptor, name);
         JsScope namespaceScope = new JsScope(enclosingScope, "namespace " + namespaceName);
         declarations.putScope(descriptor, namespaceScope);
         return namespaceScope;
+    }
+
+    @NotNull
+    private JsName getNameForNamespace(@NotNull JsScope enclosingScope, @NotNull String namespaceName) {
+        JsName name;
+        if (namespaceName.equals("")) {
+            name = enclosingScope.declareName("Anonymous");
+        } else {
+            name = enclosingScope.declareName(namespaceName);
+        }
+        return name;
     }
 
     private void visitMemberDeclarations(@NotNull NamespaceDescriptor descriptor, @NotNull JsScope namespaceScope) {

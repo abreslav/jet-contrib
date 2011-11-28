@@ -31,6 +31,11 @@ public class BasicClassTest extends TranslationTest {
     }
 
     @Test
+    public void constructorWithPropertiesAsParameters() throws Exception {
+        testFooBoxIsTrue("constructorWithPropertiesAsParameters.kt");
+    }
+
+    @Test
     public void incrementProperty() throws Exception {
         testFunctionOutput("incrementProperty.kt", "foo", "box", "OK");
     }
@@ -48,5 +53,15 @@ public class BasicClassTest extends TranslationTest {
     @Test
     public void propertyAccess() throws Exception {
         testFooBoxIsTrue("propertyAccess.kt");
+    }
+
+    @Test
+    public void propertiesAsParametersInitialized() throws Exception {
+        testFooBoxIsTrue("propertiesAsParametersInitialized.kt");
+    }
+
+    @Test
+    public void classWithoutNamespace() throws Exception {
+        testFunctionOutput("classWithoutNamespace.kt", "Anonymous", "box", true);
     }
 }
