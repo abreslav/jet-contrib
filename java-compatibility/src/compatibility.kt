@@ -1,5 +1,4 @@
 namespace std
-namespace java {
 namespace compatibility {
 
 // Array
@@ -457,5 +456,10 @@ fun Byte?.minus() : Byte { if (this != null) return this.minus() else throw Null
 fun Byte.or(other : Int?) : Byte { return this.int.or(other).byt }
 fun Byte.or(other : Byte?) : Byte { return this.or(other).byt }
 
-}
+// String
+fun <T> T.plus(str: String?) : String { return this.toString() + str }
+fun String.replaceAll(s: String, s1 : String) : String { return (this as java.lang.String).replaceAll(s, s1) as String }
+fun String.trim() : String { return (this as java.lang.String).trim() as String }
+fun String.format(s : String, vararg objects : Any?) : String { return java.lang.String.format(s, objects) as String }
+
 }
