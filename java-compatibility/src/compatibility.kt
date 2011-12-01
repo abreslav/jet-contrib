@@ -1,5 +1,11 @@
-namespace std
-namespace compatibility {
+namespace std.compatibility
+
+// TypeInfo
+fun <T> typeinfo.TypeInfo<T>.getJavaClass() : java.lang.Class<T> { return (this as java.lang.Object).getClass() as Class<T> }
+fun getJavaClass<T>() : java.lang.Class<T> { return typeinfo.typeinfo<T>.getJavaClass() }
+
+fun synchronized(lock : Any?, body : fun() : Unit) : Unit { }
+fun assert(condition : Boolean, message : fun() : String) : Unit { }
 
 // Array
 fun <T> array(vararg t : T) : Array<T> = t
@@ -465,5 +471,3 @@ fun String.replaceAll(s: String, s1 : String) : String { return (this as java.la
 fun String.trim() : String { return (this as java.lang.String).trim() as String }
 fun String.length() : Int { return (this as java.lang.String).length() }
 fun String.format(s : String, vararg objects : Any?) : String { return java.lang.String.format(s, objects) as String }
-
-}
