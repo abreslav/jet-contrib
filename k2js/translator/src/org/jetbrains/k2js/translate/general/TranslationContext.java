@@ -1,24 +1,22 @@
 package org.jetbrains.k2js.translate.general;
 
 import com.google.dart.compiler.backend.js.ast.JsName;
-import com.google.dart.compiler.backend.js.ast.JsNameRef;
 import com.google.dart.compiler.backend.js.ast.JsProgram;
 import com.google.dart.compiler.backend.js.ast.JsScope;
-import com.google.dart.compiler.util.AstUtil;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jet.lang.descriptors.*;
 import org.jetbrains.jet.lang.psi.*;
 import org.jetbrains.jet.lang.resolve.BindingContext;
 import org.jetbrains.k2js.declarations.Declarations;
+import org.jetbrains.k2js.intrinsic.Intrinsics;
 import org.jetbrains.k2js.translate.utils.BindingUtils;
+import org.jetbrains.k2js.translate.utils.Namer;
 
 /**
  * @author Talanov Pavel
  */
 public final class TranslationContext {
 
-    // TODO: extract different parts of this classes into separate classes
     private static class Scopes {
         public Scopes(@NotNull JsScope enclosingScope, @NotNull JsScope functionScope, @NotNull JsScope namespaceScope) {
             this.enclosingScope = enclosingScope;
@@ -35,69 +33,50 @@ public final class TranslationContext {
     }
 
     @NotNull
-    public static TranslationContext rootContext(@NotNull JsProgram program, @NotNull BindingContext bindingContext,
-                                                 @NotNull Declarations extractor) {
-        JsScope rootScope = program.getRootScope();
+    public static TranslationContext rootContext(@NotNull StaticContext staticContext) {
+        JsScope rootScope = staticContext.getProgram().getRootScope();
         Scopes scopes = new Scopes(rootScope, rootScope, rootScope);
-        return new TranslationContext(null, program, bindingContext,
-                scopes, extractor, new Aliaser());
+        return new TranslationContext(staticContext, scopes);
     }
 
     @NotNull
-    private final JsProgram program;
-    @NotNull
-    private final BindingContext bindingContext;
-    @NotNull
     private final Scopes scopes;
-    @Nullable
-    private final JsName namespaceName;
     @NotNull
-    private final Declarations declarations;
-    @NotNull
-    private final Aliaser aliaser;
+    private final StaticContext staticContext;
 
 
-    private TranslationContext(@Nullable JsName namespaceName, @NotNull JsProgram program,
-                               @NotNull BindingContext bindingContext, @NotNull Scopes scopes,
-                               @NotNull Declarations declarations, @NotNull Aliaser aliaser) {
-        this.program = program;
-        this.bindingContext = bindingContext;
-        this.namespaceName = namespaceName;
+    private TranslationContext(@NotNull StaticContext staticContext, @NotNull Scopes scopes) {
         this.scopes = scopes;
-        this.declarations = declarations;
-        this.aliaser = aliaser;
+        this.staticContext = staticContext;
     }
 
     @NotNull
     public TranslationContext newNamespace(@NotNull JetNamespace declaration) {
-        return newNamespace(BindingUtils.getNamespaceDescriptor(bindingContext, declaration));
+        return newNamespace(BindingUtils.getNamespaceDescriptor(staticContext.getBindingContext(), declaration));
     }
 
     @NotNull
     public TranslationContext newNamespace(@NotNull NamespaceDescriptor descriptor) {
-        JsScope namespaceScope = declarations.getScope(descriptor);
-        JsName namespaceName = getNameForDescriptor(descriptor);
+        JsScope namespaceScope = staticContext.getDeclarations().getScope(descriptor);
         Scopes newScopes = new Scopes(namespaceScope, namespaceScope, namespaceScope);
-        return new TranslationContext(namespaceName, program, bindingContext, newScopes,
-                declarations, new Aliaser());
+        return new TranslationContext(staticContext, newScopes);
     }
 
     @NotNull
     public TranslationContext newClass(@NotNull JetClass declaration) {
-        return newClass(BindingUtils.getClassDescriptor(bindingContext, declaration));
+        return newClass(BindingUtils.getClassDescriptor(staticContext.getBindingContext(), declaration));
     }
 
     @NotNull
     public TranslationContext newClass(@NotNull ClassDescriptor descriptor) {
-        JsScope classScope = declarations.getScope(descriptor);
+        JsScope classScope = staticContext.getDeclarations().getScope(descriptor);
         Scopes newScopes = new Scopes(classScope, classScope, scopes.namespaceScope);
-        return new TranslationContext(namespaceName, program, bindingContext,
-                newScopes, declarations, aliaser);
+        return new TranslationContext(staticContext, newScopes);
     }
 
     @NotNull
     public TranslationContext newPropertyAccess(@NotNull JetPropertyAccessor declaration) {
-        return newPropertyAccess(BindingUtils.getPropertyAccessorDescriptor(bindingContext, declaration));
+        return newPropertyAccess(BindingUtils.getPropertyAccessorDescriptor(staticContext.getBindingContext(), declaration));
     }
 
     @NotNull
@@ -107,48 +86,31 @@ public final class TranslationContext {
 
     @NotNull
     public TranslationContext newFunctionDeclaration(@NotNull JetNamedFunction declaration) {
-        return newFunctionDeclaration(BindingUtils.getFunctionDescriptor(bindingContext, declaration));
+        return newFunctionDeclaration(BindingUtils.getFunctionDescriptor(staticContext.getBindingContext(), declaration));
     }
 
     @NotNull
     public TranslationContext newFunctionDeclaration(@NotNull FunctionDescriptor descriptor) {
-        JsScope functionScope = declarations.getScope(descriptor);
+        JsScope functionScope = staticContext.getDeclarations().getScope(descriptor);
         Scopes newScopes = new Scopes(functionScope, scopes.classScope, scopes.namespaceScope);
-        return new TranslationContext(namespaceName, program, bindingContext,
-                newScopes, declarations, aliaser);
+        return new TranslationContext(staticContext, newScopes);
     }
-
-//    @NotNull TranslationContext newAliases(Map<JetDeclaration, JsName> newAliases) {
-//        Map<JetDeclaration, JsName> aliases = new HashMap<JetDeclaration, JsName>(this.aliases);
-//        aliases.putAll(newAliases);
-//        return new TranslationContext(namespaceName, program, bindingContext, scopes, declarations, aliases);
-//    }
 
     // Note: Should be used if and only if scope has no corresponding descriptor
     @NotNull
     public TranslationContext newEnclosingScope(@NotNull JsScope enclosingScope) {
         Scopes newScopes = new Scopes(enclosingScope, scopes.classScope, scopes.namespaceScope);
-        return new TranslationContext(namespaceName, program, bindingContext,
-                newScopes, declarations, aliaser);
-    }
-
-
-    @NotNull
-    public JsNameRef getNamespaceQualifiedReference(JsName name) {
-        if (namespaceName != null) {
-            return AstUtil.newNameRef(namespaceName.makeRef(), name);
-        }
-        return new JsNameRef(name);
+        return new TranslationContext(staticContext, newScopes);
     }
 
     @NotNull
     public BindingContext bindingContext() {
-        return bindingContext;
+        return staticContext.getBindingContext();
     }
 
     @NotNull
     public JsProgram program() {
-        return program;
+        return staticContext.getProgram();
     }
 
     @NotNull
@@ -169,38 +131,50 @@ public final class TranslationContext {
 
     @NotNull
     public JsScope getScopeForDescriptor(@NotNull DeclarationDescriptor descriptor) {
-        return declarations.getScope(descriptor);
+        return staticContext.getScopeForDescriptor(descriptor);
     }
 
     @NotNull
     public JsScope getScopeForElement(@NotNull JetElement element) {
-        DeclarationDescriptor descriptor = getDescriptorForElement(element);
-        return getScopeForDescriptor(descriptor);
+        return staticContext.getScopeForElement(element);
     }
 
     @NotNull
     public JsName getNameForDescriptor(@NotNull DeclarationDescriptor descriptor) {
-        return declarations.getName(descriptor);
+        return staticContext.getNameForDescriptor(descriptor);
     }
 
     @NotNull
     public JsName getNameForElement(@NotNull JetElement element) {
-        DeclarationDescriptor descriptor = getDescriptorForElement(element);
-        return getNameForDescriptor(descriptor);
+        return staticContext.getNameForElement(element);
     }
 
     @NotNull
     private DeclarationDescriptor getDescriptorForElement(@NotNull JetElement element) {
-        DeclarationDescriptor descriptor = bindingContext.get(BindingContext.DECLARATION_TO_DESCRIPTOR, element);
-        assert descriptor != null : "Element should have a descriptor";
-        return descriptor;
+        return staticContext.getDescriptorForElement(element);
     }
 
     public boolean isDeclared(@NotNull DeclarationDescriptor descriptor) {
-        return declarations.isDeclared(descriptor);
+        return staticContext.isDeclared(descriptor);
     }
 
+    @NotNull
     public Aliaser aliaser() {
-        return aliaser;
+        return staticContext.getAliaser();
+    }
+
+    @NotNull
+    public Namer namer() {
+        return staticContext.getNamer();
+    }
+
+    @NotNull
+    public Declarations declarations() {
+        return staticContext.getDeclarations();
+    }
+
+    @NotNull
+    public Intrinsics intrinsics() {
+        return staticContext.getIntrinsics();
     }
 }

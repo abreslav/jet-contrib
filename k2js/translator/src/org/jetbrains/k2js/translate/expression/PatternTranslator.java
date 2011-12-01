@@ -2,7 +2,6 @@ package org.jetbrains.k2js.translate.expression;
 
 import com.google.dart.compiler.backend.js.ast.JsExpression;
 import com.google.dart.compiler.backend.js.ast.JsInvocation;
-import com.google.dart.compiler.backend.js.ast.JsName;
 import com.google.dart.compiler.backend.js.ast.JsNameRef;
 import com.google.dart.compiler.util.AstUtil;
 import org.jetbrains.annotations.NotNull;
@@ -12,7 +11,6 @@ import org.jetbrains.k2js.translate.general.AbstractTranslator;
 import org.jetbrains.k2js.translate.general.Translation;
 import org.jetbrains.k2js.translate.general.TranslationContext;
 import org.jetbrains.k2js.translate.utils.BindingUtils;
-import org.jetbrains.k2js.translate.utils.Namer;
 import org.jetbrains.k2js.translate.utils.TranslationUtils;
 
 /**
@@ -62,7 +60,7 @@ public final class PatternTranslator extends AbstractTranslator {
     private JsExpression translateTypePattern(@NotNull JsExpression expressionToMatch,
                                               @NotNull JetTypePattern pattern) {
 
-        JsInvocation isCheck = AstUtil.newInvocation(Namer.isOperationReference(),
+        JsInvocation isCheck = AstUtil.newInvocation(context().namer().isOperationReference(),
                 expressionToMatch, getClassReference(pattern));
         if (isNullable(pattern)) {
             return addNullCheck(expressionToMatch, isCheck);
@@ -97,9 +95,7 @@ public final class PatternTranslator extends AbstractTranslator {
     private JsNameRef getClassNameReferenceForTypeReference(@NotNull JetTypeReference typeReference) {
         ClassDescriptor referencedClass = BindingUtils.getClassDescriptorForTypeReference
                 (context().bindingContext(), typeReference);
-        //TODO should reference class by full name here
-        JsName className = context().getNameForDescriptor(referencedClass);
-        return context().getNamespaceQualifiedReference(className);
+        return TranslationUtils.getQualifiedReference(context(), referencedClass);
     }
 
     @NotNull

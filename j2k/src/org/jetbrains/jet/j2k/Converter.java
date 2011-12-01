@@ -1,6 +1,8 @@
 package org.jetbrains.jet.j2k;
 
 import com.intellij.psi.*;
+import com.intellij.psi.search.searches.ReferencesSearch;
+import com.intellij.psi.util.PsiUtil;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jet.j2k.ast.*;
@@ -16,6 +18,13 @@ import java.util.*;
  * @author ignatov
  */
 public class Converter {
+  private final static Set<String> NOT_NULL_ANNOTATIONS = new HashSet<String>() {
+    {
+     add("org.jetbrains.annotations.NotNull");
+     add("com.sun.istack.internal.NotNull");
+     add("javax.annotation.Nonnull");
+    }
+  } ;
   private static Set<String> ourClassIdentifiers = new HashSet<String>();
 
   public static void setClassIdentifiers(Set<String> identifiers) {
@@ -286,13 +295,13 @@ public class Converter {
   @NotNull
   private static Function methodToFunction(@NotNull PsiMethod method, boolean notEmpty) {
     final IdentifierImpl identifier = new IdentifierImpl(method.getName());
-    final Type returnType = typeToType(method.getReturnType());
+    final Type returnType = typeToType(method.getReturnType(), isNotNull(method.getModifierList()));
     final Block body = blockToBlock(method.getBody(), notEmpty);
     final Element params = elementToElement(method.getParameterList());
     final List<Element> typeParameters = elementsToElementList(method.getTypeParameters());
 
     final Set<String> modifiers = modifiersListToModifiersSet(method.getModifierList());
-    if (method.getHierarchicalMethodSignature().getSuperSignatures().size() > 0)
+    if (isOverrideAnyMethodExceptMethodsFromObject(method))
       modifiers.add(Modifier.OVERRIDE);
     if (method.getParent() instanceof PsiClass && ((PsiClass) method.getParent()).isInterface())
       modifiers.remove(Modifier.ABSTRACT);
@@ -322,6 +331,17 @@ public class Converter {
       params,
       body
     );
+  }
+
+  private static boolean isOverrideAnyMethodExceptMethodsFromObject(@NotNull PsiMethod method) {
+    int counter = 0;
+    for (HierarchicalMethodSignature s : method.getHierarchicalMethodSignature().getSuperSignatures()) {
+      PsiClass containingClass = s.getMethod().getContainingClass();
+      String qualifiedName = containingClass != null ? containingClass.getQualifiedName() : "";
+      if (qualifiedName != null && !qualifiedName.equals("java.lang.Object"))
+        counter++;
+    }
+    return counter > 0;
   }
 
   @NotNull
@@ -395,6 +415,13 @@ public class Converter {
     return result;
   }
 
+  public static Type typeToType(PsiType type, boolean notNull) {
+    Type result = typeToType(type);
+    if (notNull)
+      result.convertToNotNull();
+    return result;
+  }
+
   @NotNull
   private static List<Type> typesToNotNullableTypeList(@NotNull PsiType[] types) {
     List<Type> result = new LinkedList<Type>(typesToTypeList(types));
@@ -428,8 +455,30 @@ public class Converter {
   public static Parameter parameterToParameter(@NotNull PsiParameter parameter) {
     return new Parameter(
       new IdentifierImpl(parameter.getName()), // TODO: remove
-      typeToType(parameter.getType())
+      typeToType(parameter.getType(), isNotNull(parameter.getModifierList())),
+      isReadOnly(parameter)
     );
+  }
+
+  public static boolean isNotNull(@Nullable PsiModifierList modifierList) {
+    if (modifierList != null) {
+      PsiAnnotation[] annotations = modifierList.getAnnotations();
+      for (PsiAnnotation a : annotations) {
+        String qualifiedName = a.getQualifiedName();
+        if (qualifiedName != null && NOT_NULL_ANNOTATIONS.contains(qualifiedName))
+          return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean isReadOnly(PsiParameter parameter) {
+    for (PsiReference r : (ReferencesSearch.search(parameter))) {
+        if (r instanceof PsiExpression && PsiUtil.isAccessedForWriting((PsiExpression) r)) {
+          return false;
+        }
+      }
+    return true;
   }
 
   @NotNull

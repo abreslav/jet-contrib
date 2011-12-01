@@ -14,6 +14,7 @@ import org.jetbrains.k2js.translate.general.TranslatorVisitor;
 import org.jetbrains.k2js.translate.operation.BinaryOperationTranslator;
 import org.jetbrains.k2js.translate.operation.UnaryOperationTranslator;
 import org.jetbrains.k2js.translate.reference.PropertyAccessTranslator;
+import org.jetbrains.k2js.translate.reference.ReferenceTranslator;
 import org.jetbrains.k2js.translate.utils.BindingUtils;
 
 import java.util.List;
@@ -56,7 +57,6 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
     public JsNode visitBlockExpression(@NotNull JetBlockExpression jetBlock, @NotNull TranslationContext context) {
         List<JetElement> statements = jetBlock.getStatements();
         JsBlock jsBlock = new JsBlock();
-        ;
         for (JetElement statement : statements) {
             assert statement instanceof JetExpression : "Elements in JetBlockExpression " +
                     "should be of type JetExpression";
@@ -142,7 +142,7 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
     @NotNull
     public JsNode visitSimpleNameExpression(@NotNull JetSimpleNameExpression expression,
                                             @NotNull TranslationContext context) {
-        return Translation.referenceTranslator(context).translateSimpleName(expression);
+        return ReferenceTranslator.translateSimpleName(expression, context);
     }
 
 
@@ -257,9 +257,8 @@ public final class ExpressionVisitor extends TranslatorVisitor<JsNode> {
     @NotNull
     private JsExpression translateQualifiedExpression(@NotNull JetQualifiedExpression expression,
                                                       @NotNull TranslationContext context) {
-        PropertyAccessTranslator propertyAccessTranslator = Translation.propertyAccessTranslator(context);
-        if (propertyAccessTranslator.canBePropertyGetterCall(expression)) {
-            return propertyAccessTranslator.translateAsPropertyGetterCall(expression);
+        if (PropertyAccessTranslator.canBePropertyGetterCall(expression, context)) {
+            return PropertyAccessTranslator.translateAsPropertyGetterCall(expression, context);
         }
         return translateAsQualifiedAccess(expression, context);
     }

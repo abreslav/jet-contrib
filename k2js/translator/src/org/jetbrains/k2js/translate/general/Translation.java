@@ -2,10 +2,12 @@ package org.jetbrains.k2js.translate.general;
 
 import com.google.dart.compiler.backend.js.ast.*;
 import com.google.dart.compiler.util.AstUtil;
+import com.intellij.openapi.project.Project;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.jet.lang.descriptors.NamespaceDescriptor;
 import org.jetbrains.jet.lang.psi.*;
 import org.jetbrains.jet.lang.resolve.BindingContext;
-import org.jetbrains.k2js.declarations.Declarations;
+import org.jetbrains.jet.lang.types.JetStandardLibrary;
 import org.jetbrains.k2js.translate.declaration.ClassTranslator;
 import org.jetbrains.k2js.translate.declaration.NamespaceTranslator;
 import org.jetbrains.k2js.translate.expression.ExpressionVisitor;
@@ -14,8 +16,7 @@ import org.jetbrains.k2js.translate.expression.PatternTranslator;
 import org.jetbrains.k2js.translate.expression.WhenTranslator;
 import org.jetbrains.k2js.translate.initializer.ClassInitializerTranslator;
 import org.jetbrains.k2js.translate.initializer.NamespaceInitializerTranslator;
-import org.jetbrains.k2js.translate.reference.PropertyAccessTranslator;
-import org.jetbrains.k2js.translate.reference.ReferenceTranslator;
+import org.jetbrains.k2js.translate.utils.BindingUtils;
 
 /**
  * @author Talanov Pavel
@@ -29,11 +30,6 @@ public final class Translation {
     static public FunctionTranslator functionTranslator(@NotNull JetDeclarationWithBody function,
                                                         @NotNull TranslationContext context) {
         return FunctionTranslator.newInstance(function, context);
-    }
-
-    @NotNull
-    static public PropertyAccessTranslator propertyAccessTranslator(@NotNull TranslationContext context) {
-        return PropertyAccessTranslator.newInstance(context);
     }
 
     @NotNull
@@ -54,27 +50,25 @@ public final class Translation {
     }
 
     @NotNull
-    static public ReferenceTranslator referenceTranslator(@NotNull TranslationContext context) {
-        return ReferenceTranslator.newInstance(context);
-    }
-
-    @NotNull
     static public JsNode translateExpression(@NotNull JetExpression expression, @NotNull TranslationContext context) {
         return expression.accept(new ExpressionVisitor(), context);
     }
 
     @NotNull
-    static public JsExpression translateAsExpression(@NotNull JetExpression expression, @NotNull TranslationContext context) {
+    static public JsExpression translateAsExpression(@NotNull JetExpression expression,
+                                                     @NotNull TranslationContext context) {
         return AstUtil.convertToExpression(translateExpression(expression, context));
     }
 
     @NotNull
-    static public JsStatement translateAsStatement(@NotNull JetExpression expression, @NotNull TranslationContext context) {
+    static public JsStatement translateAsStatement(@NotNull JetExpression expression,
+                                                   @NotNull TranslationContext context) {
         return AstUtil.convertToStatement(translateExpression(expression, context));
     }
 
     @NotNull
-    static public JsNode translateWhenExpression(@NotNull JetWhenExpression expression, @NotNull TranslationContext context) {
+    static public JsNode translateWhenExpression(@NotNull JetWhenExpression expression,
+                                                 @NotNull TranslationContext context) {
         return WhenTranslator.translateWhenExpression(expression, context);
     }
 
@@ -90,11 +84,17 @@ public final class Translation {
         return (new NamespaceInitializerTranslator(namespace, context)).generateInitializeMethod();
     }
 
-    public static void generateAst(@NotNull JsProgram result, @NotNull BindingContext bindingContext,
-                                   @NotNull Declarations declarations, @NotNull JetNamespace namespace) {
-        JsBlock block = result.getFragmentBlock(0);
-        TranslationContext context = TranslationContext.rootContext(result, bindingContext, declarations);
+    public static JsProgram generateAst(@NotNull BindingContext bindingContext,
+                                        @NotNull JetNamespace namespace, @NotNull Project project) {
+        JetStandardLibrary standardLibrary = JetStandardLibrary.getJetStandardLibrary(project);
+        NamespaceDescriptor descriptor = BindingUtils.getNamespaceDescriptor(bindingContext, namespace);
+        StaticContext staticContext = StaticContext.generateStaticContext(standardLibrary, bindingContext);
+        staticContext.getDeclarations().extractStandardLibrary(standardLibrary);
+        staticContext.getDeclarations().extractDeclarations(descriptor);
+        JsBlock block = staticContext.getProgram().getFragmentBlock(0);
+        TranslationContext context = TranslationContext.rootContext(staticContext);
         block.addStatement(Translation.translateNamespace(namespace, context));
+        return context.program();
     }
 
 
