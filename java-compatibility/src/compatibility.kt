@@ -1,19 +1,79 @@
 namespace std.compatibility
-
-// TypeInfo
+ 
+// TypeInfo  
 fun <T> typeinfo.TypeInfo<T>.getJavaClass() : java.lang.Class<T> { return (this as java.lang.Object).getClass() as Class<T> }
 fun getJavaClass<T>() : java.lang.Class<T> { return typeinfo.typeinfo<T>.getJavaClass() }
-
-fun synchronized(lock : Any?, body : fun() : Unit) : Unit { }
-fun assert(condition : Boolean, message : fun() : String) : Unit { }
-
-// Array
+ 
+//fun synchronized(lock : Any?, body : fun() : Unit) : Unit = java.lang.String() as String
+//fun assert(condition : Boolean, message : fun() : String) : Unit = java.lang.String() as String
+ 
+// Array  
 fun <T> array(vararg t : T) : Array<T> = t
-val <T> Array<T>?.length : Int get() = if (this != null) this.size else throw NullPointerException()
+val <T> Array<T>?.length : Int get() = this.sure().size
+//val <T> Array<T>?.length : Int get() = if (this!=null) this.size else throw NullPointerException()
 fun <T> Array<T>?.get(i: Int) : T { if (this != null) return this.get(i) as T else throw NullPointerException() }
 fun <T> Array<T>?.set(i: Int, value: T) { if (this != null) return this.set(i, value) else throw NullPointerException() }
 
-// Double
+// "constructors" for primitive types array
+fun DoubleArray(vararg content : Double) : DoubleArray = content
+fun FloatArray(vararg content : Float) : FloatArray = content
+fun LongArray(vararg content : Long) : LongArray = content
+//fun IntArray(vararg content : Int) : IntArray = content
+fun CharArray(vararg content : Char) : CharArray = content
+fun ShortArray(vararg content : Short) : ShortArray = content
+fun ByteArray(vararg content : Byte) : ByteArray = content
+fun BooleanArray(vararg content : Boolean) : BooleanArray = content
+
+// wired
+//val DoubleArray?.length : Int get() = this.sure().size
+//val FloatArray?.length : Int get() = this.sure().size
+//val LongArray?.length : Int get() = this.sure().size
+//val IntArray?.length : Int get() = this.sure().size
+//val CharArray?.length : Int get() = this.sure().size
+//val ShortArray?.length : Int get() = this.sure().size
+//val ByteArray?.length : Int get() = this.sure().size
+//val BooleanArray?.length : Int get() = this.sure().size
+
+// get for primitive types array
+fun DoubleArray?.get(i : Int) = this.sure().get(i)
+fun FloatArray?.get(i : Int) = this.sure().get(i)
+fun LongArray?.get(i : Int) = this.sure().get(i)
+fun IntArray?.get(i : Int) = this.sure().get(i)
+fun CharArray?.get(i : Int) = this.sure().get(i)
+fun ShortArray?.get(i : Int) = this.sure().get(i)
+fun ByteArray?.get(i : Int) = this.sure().get(i)
+fun BooleanArray?.get(i : Int) = this.sure().get(i)
+
+// set for primitive types array
+fun DoubleArray?.set(i : Int, v : Double) = this.sure().set(i, v)
+fun FloatArray?.set(i : Int, v : Float) = this.sure().set(i, v)
+fun LongArray?.set(i : Int, v : Long) = this.sure().set(i, v)
+fun IntArray?.set(i : Int, v : Int) = this.sure().set(i, v)
+fun CharArray?.set(i : Int, v : Char) = this.sure().set(i, v)
+fun ShortArray?.set(i : Int, v : Short) = this.sure().set(i, v)
+fun ByteArray?.set(i : Int, v : Byte) = this.sure().set(i, v)
+fun BooleanArray?.set(i : Int, v : Boolean) = this.sure().set(i, v)
+
+// "constructors" for boxed types
+fun Double(content : Double) : Double? = java.lang.Double(content) as Double?
+fun Float(content : Float) : Float? = java.lang.Float(content) as Float?
+fun Long(content : Long) : Long? = java.lang.Long(content) as Long?
+fun Int(content : Int) : Int? = java.lang.Integer(content) as Int?
+fun Char(content : Char) : Char? = java.lang.Character(content) as Char?
+fun Short(content : Short) : Short? = java.lang.Short(content) as Short?
+fun Byte(content : Byte) : Byte? = java.lang.Byte(content) as Byte?
+fun Boolean(content : Boolean) : Boolean? = java.lang.Boolean(content) as Boolean?
+
+fun Double(content : String) : Double? = java.lang.Double(content) as Double?
+fun Float(content : String) : Float? = java.lang.Float(content) as Float?
+fun Long(content : String) : Long? = java.lang.Long(content) as Long?
+fun Int(content : String) : Int? = java.lang.Integer(content) as Int?
+// fun Char(content : String) : Char? = java.lang.Character(content) as Char?
+fun Short(content : String) : Short? = java.lang.Short(content) as Short?
+fun Byte(content : String) : Byte? = java.lang.Byte(content) as Byte?
+fun Boolean(content : String) : Boolean? = java.lang.Boolean(content) as Boolean?
+
+// Double  
 fun Double?.compareTo(other : Double?) : Int { if (this != null) return this.compareTo(other) else throw NullPointerException() }
 fun Double?.compareTo(other : Float?) : Int { if (this != null) return this.compareTo(other) else throw NullPointerException() }
 fun Double?.compareTo(other : Long?) : Int { if (this != null) return this.compareTo(other) else throw NullPointerException() }
@@ -69,10 +129,10 @@ fun Double?.rangeTo(other : Short?) : Range<Double> { if (this != null) return t
 fun Double?.rangeTo(other : Byte?) : Range<Double> { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 fun Double?.rangeTo(other : Char?) : Range<Double> { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 
-fun Double?.inc() : Double { if (this != null) return this.inc() else throw NullPointerException() }
-fun Double?.dec() : Double { if (this != null) return this.dec() else throw NullPointerException() }
-fun Double?.plus() : Double { if (this != null) return this.plus() else throw NullPointerException() }
-fun Double?.minus() : Double { if (this != null) return this.minus() else throw NullPointerException() }
+//fun Double?.inc() : Double { if (this != null) return this.inc() else throw NullPointerException() }
+//fun Double?.dec() : Double { if (this != null) return this.dec() else throw NullPointerException() }
+//fun Double?.plus() : Double { if (this != null) return this.plus() else throw NullPointerException() }
+//fun Double?.minus() : Double { if (this != null) return this.minus() else throw NullPointerException() }
 
 // Float
 fun Float?.compareTo(other : Double?) : Int { if (this != null) return this.compareTo(other) else throw NullPointerException() }
@@ -131,10 +191,10 @@ fun Float?.rangeTo(other : Short?) : Range<Float> { if (this != null) return thi
 fun Float?.rangeTo(other : Byte?) : Range<Float> { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 fun Float?.rangeTo(other : Char?) : Range<Float> { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 
-fun Float?.inc() : Float { if (this != null) return this.inc() else throw NullPointerException() }
-fun Float?.dec() : Float { if (this != null) return this.dec() else throw NullPointerException() }
-fun Float?.plus() : Float { if (this != null) return this.plus() else throw NullPointerException() }
-fun Float?.minus() : Float { if (this != null) return this.minus() else throw NullPointerException() }
+//fun Float?.inc() : Float { if (this != null) return this.inc() else throw NullPointerException() }
+//fun Float?.dec() : Float { if (this != null) return this.dec() else throw NullPointerException() }
+//fun Float?.plus() : Float { if (this != null) return this.plus() else throw NullPointerException() }
+//fun Float?.minus() : Float { if (this != null) return this.minus() else throw NullPointerException() }
 
 // Long
 fun Long?.compareTo(other : Double?) : Int { if (this != null) return this.compareTo(other) else throw NullPointerException() }
@@ -193,10 +253,10 @@ fun Long?.rangeTo(other : Short?) : LongRange { if (this != null) return this.ra
 fun Long?.rangeTo(other : Byte?) : LongRange { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 fun Long?.rangeTo(other : Char?) : LongRange { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 
-fun Long?.inc() : Long { if (this != null) return this.inc() else throw NullPointerException() }
-fun Long?.dec() : Long { if (this != null) return this.dec() else throw NullPointerException() }
-fun Long?.plus() : Long { if (this != null) return this.plus() else throw NullPointerException() }
-fun Long?.minus() : Long { if (this != null) return this.minus() else throw NullPointerException() }
+//fun Long?.inc() : Long { if (this != null) return this.inc() else throw NullPointerException() }
+//fun Long?.dec() : Long { if (this != null) return this.dec() else throw NullPointerException() }
+//fun Long?.plus() : Long { if (this != null) return this.plus() else throw NullPointerException() }
+//fun Long?.minus() : Long { if (this != null) return this.minus() else throw NullPointerException() }
 
 fun Long?.shl(bits : Int?) : Long { if (this != null) return this.shl(bits) else throw NullPointerException() }
 fun Long?.shr(bits : Int?) : Long { if (this != null) return this.shr(bits) else throw NullPointerException() }
@@ -204,7 +264,7 @@ fun Long?.ushr(bits : Int?) : Long { if (this != null) return this.ushr(bits) el
 fun Long?.and(other : Long?) : Long { if (this != null) return this.and(other) else throw NullPointerException() }
 fun Long?.or(other : Long?) : Long { if (this != null) return this.or(other) else throw NullPointerException() }
 fun Long?.xor(other : Long?) : Long { if (this != null) return this.xor(other) else throw NullPointerException() }
-fun Long?.inv() : Long { if (this != null) return this.inv() else throw NullPointerException() }
+//fun Long?.inv() : Long { if (this != null) return this.inv() else throw NullPointerException() }
 
 // Int
 fun Int?.compareTo(other : Double?) : Int { if (this != null) return this.compareTo(other) else throw NullPointerException() }
@@ -218,7 +278,8 @@ fun Int?.compareTo(other : Char?) : Int { if (this != null) return this.compareT
 fun Int?.plus(other : Double?) : Double { if (this != null) return this.plus(other) else throw NullPointerException() }
 fun Int?.plus(other : Float?) : Float { if (this != null) return this.plus(other) else throw NullPointerException() }
 fun Int?.plus(other : Long?) : Long { if (this != null) return this.plus(other) else throw NullPointerException() }
-fun Int?.plus(other : Int?) : Int { if (this != null) return this.plus(other) else throw NullPointerException() }
+//fun Int?.plus(other : Int?) : Int { if (this != null) return this.plus(other) else throw NullPointerException() }
+fun Int?.plus(other : Int?) = this.sure().plus(other.sure())
 fun Int?.plus(other : Short?) : Int { if (this != null) return this.plus(other) else throw NullPointerException() }
 fun Int?.plus(other : Byte?) : Int { if (this != null) return this.plus(other) else throw NullPointerException() }
 fun Int?.plus(other : Char?) : Int { if (this != null) return this.plus(other) else throw NullPointerException() }
@@ -263,10 +324,10 @@ fun Int?.rangeTo(other : Short?) : IntRange { if (this != null) return this.rang
 fun Int?.rangeTo(other : Byte?) : IntRange { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 fun Int?.rangeTo(other : Char?) : IntRange { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 
-fun Int?.inc() : Int { if (this != null) return this.inc() else throw NullPointerException() }
-fun Int?.dec() : Int { if (this != null) return this.dec() else throw NullPointerException() }
-fun Int?.plus() : Int { if (this != null) return this.plus() else throw NullPointerException() }
-fun Int?.minus() : Int { if (this != null) return this.minus() else throw NullPointerException() }
+//fun Int?.inc() : Int { if (this != null) return this.inc() else throw NullPointerException() }
+//fun Int?.dec() : Int { if (this != null) return this.dec() else throw NullPointerException() }
+//fun Int?.plus() : Int { if (this != null) return this.plus() else throw NullPointerException() }
+//fun Int?.minus() : Int { if (this != null) return this.minus() else throw NullPointerException() }
 
 fun Int?.shl(bits : Int?) : Int { if (this != null) return this.shl(bits) else throw NullPointerException() }
 fun Int?.shr(bits : Int?) : Int { if (this != null) return this.shr(bits) else throw NullPointerException() }
@@ -274,7 +335,7 @@ fun Int?.ushr(bits : Int?) : Int { if (this != null) return this.ushr(bits) else
 fun Int?.and(other : Int?) : Int { if (this != null) return this.and(other) else throw NullPointerException() }
 fun Int?.or(other : Int?) : Int { if (this != null) return this.or(other) else throw NullPointerException() }
 fun Int?.xor(other : Int?) : Int { if (this != null) return this.xor(other) else throw NullPointerException() }
-fun Int?.inv() : Int { if (this != null) return this.inv() else throw NullPointerException() }
+//fun Int?.inv() : Int { if (this != null) return this.inv() else throw NullPointerException() }
 
 // Char
 fun Char?.compareTo(other : Double?) : Int { if (this != null) return this.compareTo(other) else throw NullPointerException() }
@@ -329,10 +390,10 @@ fun Char?.rangeTo(other : Short?) : IntRange { if (this != null) return this.ran
 fun Char?.rangeTo(other : Byte?) : IntRange { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 fun Char?.rangeTo(other : Char?) : IntRange { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 
-fun Char?.inc() : Char { if (this != null) return this.inc() else throw NullPointerException() }
-fun Char?.dec() : Char { if (this != null) return this.dec() else throw NullPointerException() }
-fun Char?.plus() : Int { if (this != null) return this.plus() else throw NullPointerException() }
-fun Char?.minus() : Int { if (this != null) return this.minus() else throw NullPointerException() }
+//fun Char?.inc() : Char { if (this != null) return this.inc() else throw NullPointerException() }
+//fun Char?.dec() : Char { if (this != null) return this.dec() else throw NullPointerException() }
+//fun Char?.plus() : Int { if (this != null) return this.plus() else throw NullPointerException() }
+//fun Char?.minus() : Int { if (this != null) return this.minus() else throw NullPointerException() }
 
 // Short
 fun Short?.compareTo(other : Double?) : Int { if (this != null) return this.compareTo(other) else throw NullPointerException() }
@@ -391,10 +452,10 @@ fun Short?.rangeTo(other : Short?) : IntRange { if (this != null) return this.ra
 fun Short?.rangeTo(other : Byte?) : IntRange { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 fun Short?.rangeTo(other : Char?) : IntRange { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 
-fun Short?.inc() : Short { if (this != null) return this.inc() else throw NullPointerException() }
-fun Short?.dec() : Short { if (this != null) return this.dec() else throw NullPointerException() }
-fun Short?.plus() : Short { if (this != null) return this.plus() else throw NullPointerException() }
-fun Short?.minus() : Short { if (this != null) return this.minus() else throw NullPointerException() }
+//fun Short?.inc() : Short { if (this != null) return this.inc() else throw NullPointerException() }
+//fun Short?.dec() : Short { if (this != null) return this.dec() else throw NullPointerException() }
+//fun Short?.plus() : Short { if (this != null) return this.plus() else throw NullPointerException() }
+//fun Short?.minus() : Short { if (this != null) return this.minus() else throw NullPointerException() }
 
 // Byte
 fun Byte?.compareTo(other : Double?) : Int { if (this != null) return this.compareTo(other) else throw NullPointerException() }
@@ -420,7 +481,7 @@ fun Byte?.minus(other : Int?) : Int { if (this != null) return this.minus(other)
 fun Byte?.minus(other : Short?) : Int { if (this != null) return this.minus(other) else throw NullPointerException() }
 fun Byte?.minus(other : Byte?) : Int { if (this != null) return this.minus(other) else throw NullPointerException() }
 fun Byte?.minus(other : Char?) : Int { if (this != null) return this.minus(other) else throw NullPointerException() }
-
+ 
 fun Byte?.times(other : Double?) : Double { if (this != null) return this.times(other) else throw NullPointerException() }
 fun Byte?.times(other : Float?) : Float { if (this != null) return this.times(other) else throw NullPointerException() }
 fun Byte?.times(other : Long?) : Long { if (this != null) return this.times(other) else throw NullPointerException() }
@@ -428,7 +489,7 @@ fun Byte?.times(other : Int?) : Int { if (this != null) return this.times(other)
 fun Byte?.times(other : Short?) : Int { if (this != null) return this.times(other) else throw NullPointerException() }
 fun Byte?.times(other : Byte?) : Int { if (this != null) return this.times(other) else throw NullPointerException() }
 fun Byte?.times(other : Char?) : Int { if (this != null) return this.times(other) else throw NullPointerException() }
-
+ 
 fun Byte?.div(other : Double?) : Double { if (this != null) return this.div(other) else throw NullPointerException() }
 fun Byte?.div(other : Float?) : Float { if (this != null) return this.div(other) else throw NullPointerException() }
 fun Byte?.div(other : Long?) : Long { if (this != null) return this.div(other) else throw NullPointerException() }
@@ -436,7 +497,7 @@ fun Byte?.div(other : Int?) : Int { if (this != null) return this.div(other) els
 fun Byte?.div(other : Short?) : Int { if (this != null) return this.div(other) else throw NullPointerException() }
 fun Byte?.div(other : Byte?) : Int { if (this != null) return this.div(other) else throw NullPointerException() }
 fun Byte?.div(other : Char?) : Int { if (this != null) return this.div(other) else throw NullPointerException() }
-
+ 
 fun Byte?.mod(other : Double?) : Double { if (this != null) return this.mod(other) else throw NullPointerException() }
 fun Byte?.mod(other : Float?) : Float { if (this != null) return this.mod(other) else throw NullPointerException() }
 fun Byte?.mod(other : Long?) : Long { if (this != null) return this.mod(other) else throw NullPointerException() }
@@ -444,7 +505,7 @@ fun Byte?.mod(other : Int?) : Int { if (this != null) return this.mod(other) els
 fun Byte?.mod(other : Short?) : Int { if (this != null) return this.mod(other) else throw NullPointerException() }
 fun Byte?.mod(other : Byte?) : Int { if (this != null) return this.mod(other) else throw NullPointerException() }
 fun Byte?.mod(other : Char?) : Int { if (this != null) return this.mod(other) else throw NullPointerException() }
-
+ 
 fun Byte?.rangeTo(other : Double?) : Range<Double> { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 fun Byte?.rangeTo(other : Float?) : Range<Float> { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 fun Byte?.rangeTo(other : Long?) : LongRange { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
@@ -452,17 +513,17 @@ fun Byte?.rangeTo(other : Int?) : IntRange { if (this != null) return this.range
 fun Byte?.rangeTo(other : Short?) : IntRange { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 fun Byte?.rangeTo(other : Byte?) : IntRange { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
 fun Byte?.rangeTo(other : Char?) : IntRange { if (this != null) return this.rangeTo(other) else throw NullPointerException() }
-
-fun Byte?.inc() : Byte { if (this != null) return this.inc() else throw NullPointerException() }
-fun Byte?.dec() : Byte { if (this != null) return this.dec() else throw NullPointerException() }
-fun Byte?.plus() : Byte { if (this != null) return this.plus() else throw NullPointerException() }
-fun Byte?.minus() : Byte { if (this != null) return this.minus() else throw NullPointerException() }
-
-// Byte
+ 
+//fun Byte?.inc() : Byte { if (this != null) return this.inc() else throw NullPointerException() }
+//fun Byte?.dec() : Byte { if (this != null) return this.dec() else throw NullPointerException() }
+//fun Byte?.plus() : Byte { if (this != null) return this.plus() else throw NullPointerException() }
+//fun Byte?.minus() : Byte { if (this != null) return this.minus() else throw NullPointerException() }
+ 
+// Byte  
 fun Byte.or(other : Int?) : Byte { return this.int.or(other).byt }
 fun Byte.or(other : Byte?) : Byte { return this.or(other).byt }
-
-// String
+ 
+// String  
 fun <T> T.plus(str: String?) : String { return this.toString() + str }
 fun String.lastIndexOf(s: String) : Int { return (this as java.lang.String).lastIndexOf(s) }
 fun String.lastIndexOf(s: Char) : Int { return (this as java.lang.String).lastIndexOf(s.toString()) }
@@ -470,4 +531,15 @@ fun String.indexOf(p0 : String, p1 : Int) : Int { return (this as java.lang.Stri
 fun String.replaceAll(s: String, s1 : String) : String { return (this as java.lang.String).replaceAll(s, s1) as String }
 fun String.trim() : String { return (this as java.lang.String).trim() as String }
 fun String.length() : Int { return (this as java.lang.String).length() }
+fun String.getBytes() : ByteArray { return (this as java.lang.String).getBytes() as ByteArray }
 fun String.format(s : String, vararg objects : Any?) : String { return java.lang.String.format(s, objects) as String }
+ 
+// "constructors" for String
+fun String(bytes : ByteArray?, i : Int, i1 : Int, s : String) : String = java.lang.String(bytes, i, i1) as String
+fun String(bytes : ByteArray?, i : Int, i1 : Int, charset : java.nio.charset.Charset?) : String = java.lang.String(bytes, i, i1, charset) as String
+fun String(bytes : ByteArray?, s : String?) : String = java.lang.String(bytes, s) as String
+fun String(bytes : ByteArray?, charset : java.nio.charset.Charset?) : String = java.lang.String(bytes, charset) as String
+fun String(bytes : ByteArray?, i : Int, i1 : Int) : String = java.lang.String(bytes, i, i1) as String
+fun String(bytes : ByteArray?) : String = java.lang.String(bytes) as String
+fun String(stringBuffer : java.lang.StringBuffer?) : String = java.lang.String(stringBuffer) as String
+fun String(stringBuilder : java.lang.StringBuilder?) : String = java.lang.String(stringBuilder) as String
