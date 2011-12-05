@@ -9,9 +9,9 @@ import org.jetbrains.jet.lang.psi.JetClass;
 import org.jetbrains.jet.lang.psi.JetDelegationSpecifier;
 import org.jetbrains.jet.lang.psi.JetDelegatorToSuperCall;
 import org.jetbrains.jet.lang.psi.JetParameter;
-import org.jetbrains.k2js.translate.general.TranslationContext;
+import org.jetbrains.k2js.translate.context.Namer;
+import org.jetbrains.k2js.translate.context.TranslationContext;
 import org.jetbrains.k2js.translate.utils.BindingUtils;
-import org.jetbrains.k2js.translate.utils.Namer;
 import org.jetbrains.k2js.translate.utils.TranslationUtils;
 
 import java.util.ArrayList;
@@ -60,7 +60,7 @@ public final class ClassInitializerTranslator extends AbstractInitializerTransla
     }
 
     private void addCallToSuperMethod(@NotNull JetDelegatorToSuperCall superCall) {
-        JsName superMethodName = initializerMethodScope.declareName(Namer.SUPER_METHOD_NAME);
+        JsName superMethodName = initializerMethodScope.declareName(Namer.superMethodName());
         List<JsExpression> arguments = translateArguments(superCall);
         initializerStatements.add(AstUtil.convertToStatement
                 (AstUtil.newInvocation(AstUtil.thisQualifiedReference(superMethodName), arguments)));
@@ -68,7 +68,7 @@ public final class ClassInitializerTranslator extends AbstractInitializerTransla
 
     @NotNull
     private List<JsExpression> translateArguments(@NotNull JetDelegatorToSuperCall superCall) {
-        return TranslationUtils.translateArgumentList(superCall.getValueArguments(), context());
+        return TranslationUtils.translateArgumentList(context(), superCall.getValueArguments());
     }
 
     @Nullable

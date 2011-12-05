@@ -1,4 +1,4 @@
-package org.jetbrains.k2js.translate.utils;
+package org.jetbrains.k2js.translate.context;
 
 import com.google.dart.compiler.backend.js.ast.JsName;
 import com.google.dart.compiler.backend.js.ast.JsNameRef;
@@ -24,8 +24,7 @@ public final class Namer {
     private static final String SETTER_PREFIX = "set_";
     private static final String GETTER_PREFIX = "get_";
     private static final String BACKING_FIELD_PREFIX = "$";
-    // TODO: work on the unified approach to string constants
-    public static final String SUPER_METHOD_NAME = "super_init";
+    private static final String SUPER_METHOD_NAME = "super_init";
     private static final String KOTLIN_OBJECT_NAME = "Kotlin";
 
     @NotNull
@@ -33,9 +32,14 @@ public final class Namer {
         return AstUtil.newQualifiedNameRef(INITIALIZE_METHOD_NAME);
     }
 
+//    @NotNull
+//    public static JsNameRef superMethodReference() {
+//        return AstUtil.newQualifiedNameRef(SUPER_METHOD_NAME);
+//    }
+
     @NotNull
-    public static JsNameRef superMethodReference() {
-        return AstUtil.newQualifiedNameRef(SUPER_METHOD_NAME);
+    public static String superMethodName() {
+        return SUPER_METHOD_NAME;
     }
 
     @NotNull
@@ -118,6 +122,11 @@ public final class Namer {
         JsNameRef kotlinReference = kotlinName.makeRef();
         AstUtil.setQualifier(reference, kotlinReference);
         return reference;
+    }
+
+    @NotNull
+    public JsNameRef kotlinObject() {
+        return kotlinName.makeRef();
     }
 
     @NotNull

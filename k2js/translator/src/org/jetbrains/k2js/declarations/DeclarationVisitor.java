@@ -5,7 +5,7 @@ import com.google.dart.compiler.backend.js.ast.JsScope;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jet.lang.descriptors.*;
-import org.jetbrains.k2js.translate.utils.Namer;
+import org.jetbrains.k2js.translate.context.Namer;
 
 /**
  * @author Talanov Pavel
@@ -17,14 +17,6 @@ public final class DeclarationVisitor extends DeclarationDescriptorVisitor<Void,
 
     /*package*/ DeclarationVisitor(@NotNull Declarations declarations) {
         this.declarations = declarations;
-    }
-
-    @Override
-    public Void visitClassDescriptor(@NotNull ClassDescriptor descriptor, @NotNull DeclarationContext context) {
-        DeclarationContext classContext = declareClass(descriptor, context);
-        declareClassConstructor(descriptor, context);
-        declareClassMembers(descriptor, classContext);
-        return null;
     }
 
     @NotNull
@@ -55,6 +47,15 @@ public final class DeclarationVisitor extends DeclarationDescriptorVisitor<Void,
     private JsName declareName(@NotNull DeclarationDescriptor descriptor,
                                @NotNull DeclarationContext context) {
         return declareName(descriptor, context, descriptor.getName());
+    }
+
+
+    @Override
+    public Void visitClassDescriptor(@NotNull ClassDescriptor descriptor, @NotNull DeclarationContext context) {
+        DeclarationContext classContext = declareClass(descriptor, context);
+        declareClassConstructor(descriptor, context);
+        declareClassMembers(descriptor, classContext);
+        return null;
     }
 
     private void declareClassMembers(@NotNull ClassDescriptor descriptor, @NotNull DeclarationContext context) {
@@ -101,7 +102,8 @@ public final class DeclarationVisitor extends DeclarationDescriptorVisitor<Void,
 
     public void extractAccessor(@Nullable PropertyAccessorDescriptor descriptor, boolean isGetter,
                                 @NotNull String propertyName, @NotNull DeclarationContext context) {
-        assert descriptor != null : "Accessor descriptor should not be null";
+        if (descriptor == null) return;
+
         String accessorName = Namer.getNameForAccessor(propertyName, isGetter);
         declareName(descriptor, context, accessorName);
         declareScope(descriptor, context, (isGetter ? "getter " : "setter ") + propertyName);

@@ -2,10 +2,12 @@ package org.jetbrains.k2js.translate.general;
 
 import com.google.dart.compiler.backend.js.ast.JsProgram;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.k2js.translate.context.TranslationContext;
 
 /**
  * @author Talanov Pavel
  */
+//TODO: provide helper methods for different parts of context
 public abstract class AbstractTranslator {
 
     @NotNull

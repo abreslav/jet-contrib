@@ -13,69 +13,54 @@ import org.jetbrains.jet.lang.descriptors.PropertySetterDescriptor;
 import org.jetbrains.jet.lang.psi.JetExpression;
 import org.jetbrains.jet.lang.psi.JetQualifiedExpression;
 import org.jetbrains.jet.lang.psi.JetSimpleNameExpression;
-import org.jetbrains.k2js.translate.general.AbstractTranslator;
+import org.jetbrains.k2js.translate.context.TranslationContext;
 import org.jetbrains.k2js.translate.general.Translation;
-import org.jetbrains.k2js.translate.general.TranslationContext;
 import org.jetbrains.k2js.translate.utils.BindingUtils;
 import org.jetbrains.k2js.translate.utils.PsiUtils;
-import org.jetbrains.k2js.translate.utils.TranslationUtils;
 
 /**
  * @author Talanov Pavel
  */
-public final class PropertyAccessTranslator extends AbstractTranslator {
+public final class PropertyAccessTranslator extends AccessTranslator {
 
     private static String MESSAGE = "Cannot be accessor call. Use canBeProperty*Call to ensure this method " +
             "can be called safely.";
 
+
     @NotNull
-    public static JsInvocation translateAsPropertySetterCall(@NotNull JetQualifiedExpression expression,
+    public static JsExpression translateAsPropertyGetterCall(@NotNull JetQualifiedExpression expression,
                                                              @NotNull TranslationContext context) {
         return (new PropertyAccessTranslator(expression, context))
-                .translateAsPropertySetterCall();
+                .translateAsGet();
     }
 
     @NotNull
-    public static JsInvocation translateAsPropertySetterCall(@NotNull JetSimpleNameExpression expression,
-                                                             @NotNull TranslationContext context) {
-        return (new PropertyAccessTranslator(expression, context))
-                .translateAsPropertySetterCall();
+    public static PropertyAccessTranslator newInstance(@NotNull JetQualifiedExpression expression,
+                                                       @NotNull TranslationContext context) {
+        return (new PropertyAccessTranslator(expression, context));
     }
 
     @NotNull
-    public static JsInvocation translateAsPropertySetterCall(@NotNull JetExpression expression,
+    public static PropertyAccessTranslator newInstance(@NotNull JetSimpleNameExpression expression,
+                                                       @NotNull TranslationContext context) {
+        return (new PropertyAccessTranslator(expression, context));
+    }
+
+    @NotNull
+    public static JsExpression translateAsPropertyGetterCall(@NotNull JetSimpleNameExpression expression,
                                                              @NotNull TranslationContext context) {
+        return (new PropertyAccessTranslator(expression, context))
+                .translateAsGet();
+    }
+
+    @NotNull
+    public static PropertyAccessTranslator newInstance(@NotNull JetExpression expression,
+                                                       @NotNull TranslationContext context) {
         if (expression instanceof JetQualifiedExpression) {
-            return translateAsPropertySetterCall((JetQualifiedExpression) expression, context);
+            return newInstance((JetQualifiedExpression) expression, context);
         }
         if (expression instanceof JetSimpleNameExpression) {
-            return translateAsPropertySetterCall((JetSimpleNameExpression) expression, context);
-        }
-        throw new AssertionError(MESSAGE);
-    }
-
-    @NotNull
-    public static JsInvocation translateAsPropertyGetterCall(@NotNull JetQualifiedExpression expression,
-                                                             @NotNull TranslationContext context) {
-        return (new PropertyAccessTranslator(expression, context))
-                .translateAsPropertyGetterCall();
-    }
-
-    @NotNull
-    public static JsInvocation translateAsPropertyGetterCall(@NotNull JetSimpleNameExpression expression,
-                                                             @NotNull TranslationContext context) {
-        return (new PropertyAccessTranslator(expression, context))
-                .translateAsPropertyGetterCall();
-    }
-
-    @NotNull
-    public static JsInvocation translateAsPropertyGetterCall(@NotNull JetExpression expression,
-                                                             @NotNull TranslationContext context) {
-        if (expression instanceof JetQualifiedExpression) {
-            return translateAsPropertyGetterCall((JetQualifiedExpression) expression, context);
-        }
-        if (expression instanceof JetSimpleNameExpression) {
-            return translateAsPropertyGetterCall((JetSimpleNameExpression) expression, context);
+            return newInstance((JetSimpleNameExpression) expression, context);
         }
         throw new AssertionError(MESSAGE);
     }
@@ -134,10 +119,20 @@ public final class PropertyAccessTranslator extends AbstractTranslator {
         this.propertyDescriptor = getNotNullPropertyDescriptor();
     }
 
+    @Override
     @NotNull
-    public JsInvocation translateAsPropertyGetterCall() {
+    public JsExpression translateAsGet() {
         JsName getterName = getNotNullGetterName();
         return qualifiedAccessorInvocation(getterName);
+    }
+
+    @Override
+    @NotNull
+    public JsExpression translateAsSet(@NotNull JsExpression toSetTo) {
+        JsName setterName = getNotNullSetterName();
+        JsInvocation setterCall = qualifiedAccessorInvocation(setterName);
+        setterCall.getArguments().add(toSetTo);
+        return setterCall;
     }
 
     @NotNull
@@ -148,28 +143,13 @@ public final class PropertyAccessTranslator extends AbstractTranslator {
     }
 
     @NotNull
-    private JsExpression defaultQualifier() {
-        if (BindingUtils.isOwnedByClass(propertyDescriptor)) {
-            return TranslationUtils.getThisQualifier(context());
-        }
-        assert BindingUtils.isOwnedByNamespace(propertyDescriptor)
-                : "Property can be a member of class or a namespace.";
-        //NOTE: qualifier for descriptor and it's accessor should be equal
-        return context().declarations().getQualifier(propertyDescriptor);
-    }
-
-    @NotNull
-    public JsInvocation translateAsPropertySetterCall() {
-        JsName setterName = getNotNullSetterName();
-        return qualifiedAccessorInvocation(setterName);
-    }
-
-    @NotNull
     private JsExpression translateQualifier() {
         if (qualifier != null) {
             return Translation.translateAsExpression(qualifier, context());
         }
-        return defaultQualifier();
+        JsExpression implicitReceiver = ReferenceTranslator.getImplicitReceiver(propertyDescriptor, context());
+        assert implicitReceiver != null : "Property can only be a member of class or a namespace.";
+        return implicitReceiver;
     }
 
 

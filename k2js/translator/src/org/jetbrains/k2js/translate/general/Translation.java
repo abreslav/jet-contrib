@@ -8,6 +8,8 @@ import org.jetbrains.jet.lang.descriptors.NamespaceDescriptor;
 import org.jetbrains.jet.lang.psi.*;
 import org.jetbrains.jet.lang.resolve.BindingContext;
 import org.jetbrains.jet.lang.types.JetStandardLibrary;
+import org.jetbrains.k2js.translate.context.StaticContext;
+import org.jetbrains.k2js.translate.context.TranslationContext;
 import org.jetbrains.k2js.translate.declaration.ClassTranslator;
 import org.jetbrains.k2js.translate.declaration.NamespaceTranslator;
 import org.jetbrains.k2js.translate.expression.ExpressionVisitor;
@@ -86,10 +88,12 @@ public final class Translation {
 
     public static JsProgram generateAst(@NotNull BindingContext bindingContext,
                                         @NotNull JetNamespace namespace, @NotNull Project project) {
+        //TODO: move some of the code somewhere
         JetStandardLibrary standardLibrary = JetStandardLibrary.getJetStandardLibrary(project);
         NamespaceDescriptor descriptor = BindingUtils.getNamespaceDescriptor(bindingContext, namespace);
         StaticContext staticContext = StaticContext.generateStaticContext(standardLibrary, bindingContext);
-        staticContext.getDeclarations().extractStandardLibrary(standardLibrary);
+        staticContext.getDeclarations().
+                extractStandardLibrary(standardLibrary, staticContext.getNamer().kotlinObject());
         staticContext.getDeclarations().extractDeclarations(descriptor);
         JsBlock block = staticContext.getProgram().getFragmentBlock(0);
         TranslationContext context = TranslationContext.rootContext(staticContext);

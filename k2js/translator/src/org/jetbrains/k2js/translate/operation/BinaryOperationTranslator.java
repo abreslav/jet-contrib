@@ -1,154 +1,89 @@
 package org.jetbrains.k2js.translate.operation;
 
-import com.google.dart.compiler.backend.js.ast.*;
-import com.google.dart.compiler.util.AstUtil;
+import com.google.dart.compiler.backend.js.ast.JsBinaryOperation;
+import com.google.dart.compiler.backend.js.ast.JsBinaryOperator;
+import com.google.dart.compiler.backend.js.ast.JsExpression;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
+import org.jetbrains.jet.lang.descriptors.FunctionDescriptor;
 import org.jetbrains.jet.lang.psi.JetBinaryExpression;
-import org.jetbrains.jet.lang.psi.JetExpression;
 import org.jetbrains.jet.lang.types.expressions.OperatorConventions;
 import org.jetbrains.jet.lexer.JetToken;
-import org.jetbrains.k2js.translate.general.Translation;
-import org.jetbrains.k2js.translate.general.TranslationContext;
-import org.jetbrains.k2js.translate.reference.PropertyAccessTranslator;
+import org.jetbrains.jet.lexer.JetTokens;
+import org.jetbrains.k2js.translate.context.TranslationContext;
+import org.jetbrains.k2js.translate.general.AbstractTranslator;
+import org.jetbrains.k2js.translate.intrinsic.EqualsIntrinsic;
+import org.jetbrains.k2js.translate.reference.CallTranslator;
+
+import java.util.Arrays;
+
+import static org.jetbrains.k2js.translate.utils.BindingUtils.getFunctionDescriptorForOperationExpression;
+import static org.jetbrains.k2js.translate.utils.DescriptorUtils.isEquals;
+import static org.jetbrains.k2js.translate.utils.PsiUtils.getOperationToken;
+import static org.jetbrains.k2js.translate.utils.TranslationUtils.translateLeftExpression;
+import static org.jetbrains.k2js.translate.utils.TranslationUtils.translateRightExpression;
+
 
 /**
  * @author Talanov Pavel
  */
-public final class BinaryOperationTranslator extends OperationTranslator {
+public final class BinaryOperationTranslator extends AbstractTranslator {
 
     @NotNull
-    static public JsExpression translate(@NotNull JetBinaryExpression expression,
+    public static JsExpression translate(@NotNull JetBinaryExpression expression,
                                          @NotNull TranslationContext context) {
-        return (new BinaryOperationTranslator(expression, context)).translate();
+        return (new BinaryOperationTranslator(expression, context).translate());
     }
-
-    @NotNull
-    private final JetBinaryExpression expression;
-    private final boolean isPropertyOnTheLeft;
-    private final boolean isVariableReassignment;
-    @NotNull
-    private final JsExpression left;
-    @NotNull
-    private final JsExpression right;
-    @Nullable
-    private final JsNameRef operationReference;
 
     private BinaryOperationTranslator(@NotNull JetBinaryExpression expression,
                                       @NotNull TranslationContext context) {
         super(context);
         this.expression = expression;
-        this.isPropertyOnTheLeft = isPropertyAccess(expression.getLeft());
-        this.isVariableReassignment = isVariableReassignment(expression);
-        this.operationReference = getOverloadedOperationReference(expression.getOperationReference());
-        this.right = translateRightExpression();
-        //TODO: decide whether it is harmful to possibly translateNamespace left expression more than once
-        this.left = translateLeftExpression();
+        this.operationDescriptor =
+                getFunctionDescriptorForOperationExpression(context().bindingContext(), expression);
     }
 
     @NotNull
-    JsExpression translate() {
-        if (isCompareTo()) {
-            return asCompareToOverload();
+    private final JetBinaryExpression expression;
+
+    @Nullable
+    private final FunctionDescriptor operationDescriptor;
+
+    @NotNull
+    private JsExpression translate() {
+        if (AssignmentTranslator.isAssignmentOperator(expression)) {
+            return AssignmentTranslator.translate(expression, context());
         }
-        if (isOverloadedCall()) {
-            return asOverloadedMethodCall();
+        if (operationDescriptor == null) {
+            return translateAsUnOverloadableBinaryOperation();
         }
-        return asBinaryOperation();
+        if (CompareToTranslator.isCompareToCall(expression, context())) {
+            return CompareToTranslator.translate(expression, context());
+        }
+        if (isEquals(operationDescriptor)) {
+            return translateAsEqualsCall();
+        }
+        return CallTranslator.translate(expression, context());
     }
 
     @NotNull
-    private JsExpression asCompareToOverload() {
-        JetToken operationToken = getOperationToken();
-        assert (OperatorConventions.COMPARISON_OPERATIONS.contains(operationToken));
-        JsNumberLiteral zeroLiteral = program().getNumberLiteral(0);
-        JsBinaryOperator correspondingOperator = OperatorTable.getBinaryOperator(operationToken);
-        return new JsBinaryOperation(correspondingOperator, overloadedMethodInvocation(), zeroLiteral);
-    }
-
-    private boolean isOverloadedCall() {
-        return operationReference != null;
-    }
-
-    private boolean isCompareTo() {
-        if (operationReference == null) {
-            return false;
-        }
-        String nameForOperationSymbol = OperatorConventions.getNameForOperationSymbol(getOperationToken());
-        assert nameForOperationSymbol != null : "Must have a name for overloaded operator";
-        return (nameForOperationSymbol.equals("compareTo"));
+    private JsExpression translateAsEqualsCall() {
+        assert operationDescriptor != null : "Equals operation must resolve to descriptor.";
+        EqualsIntrinsic intrinsic = context().intrinsics().getEqualsIntrinsic(operationDescriptor);
+        intrinsic.setNegated(expression.getOperationToken().equals(JetTokens.EXCLEQ));
+        JsExpression left = translateLeftExpression(context(), expression);
+        JsExpression right = translateRightExpression(context(), expression);
+        return intrinsic.apply(left, Arrays.asList(right), context());
     }
 
     @NotNull
-    private JsExpression asOverloadedMethodCall() {
-        if (isPropertyOnTheLeft) {
-            return overloadOnProperty();
-        }
-        if (isVariableReassignment) {
-            return nonPropertyReassignment();
-        }
-        return overloadedMethodInvocation();
-    }
-
-    private JsExpression nonPropertyReassignment() {
-        assert left instanceof JsNameRef : "Reassignment should be called on l-value.";
-        return AstUtil.newAssignment((JsNameRef) left, overloadedMethodInvocation());
-    }
-
-    @NotNull
-    private JsExpression overloadOnProperty() {
-        if (isVariableReassignment) {
-            return setterCall(overloadedMethodInvocation());
-        } else {
-            return overloadedMethodInvocation();
-        }
-    }
-
-    @NotNull
-    private JsExpression asBinaryOperation() {
-        if (isPropertyOnTheLeft && OperatorTable.isAssignment(getOperationToken())) {
-            return setterCall(right);
-        }
-        JetToken token = getOperationToken();
-        if (OperatorTable.hasCorrespondingBinaryOperator(token)) {
-            return new JsBinaryOperation(OperatorTable.getBinaryOperator(token), left, right);
-        }
-        if (OperatorTable.hasCorrespondingFunctionInvocation(token)) {
-            JsInvocation functionInvocation = OperatorTable.getCorrespondingFunctionInvocation(token);
-            functionInvocation.setArguments(left, right);
-            return functionInvocation;
-        }
-        throw new AssertionError("Unsupported token encountered: " + token.toString());
-    }
-
-    private JsExpression translateLeftExpression() {
-        return Translation.translateAsExpression(expression.getLeft(), context());
-    }
-
-    @NotNull
-    private JsExpression overloadedMethodInvocation() {
-        AstUtil.setQualifier(operationReference, left);
-        return AstUtil.newInvocation(operationReference, right);
-    }
-
-    @NotNull
-    private JsExpression translateRightExpression() {
-        JetExpression rightExpression = expression.getRight();
-        assert rightExpression != null : "Binary expression should have a right expression";
-        return Translation.translateAsExpression(rightExpression, context());
-    }
-
-    @NotNull
-    private JetToken getOperationToken() {
-        return (JetToken) expression.getOperationToken();
-    }
-
-    @NotNull
-    public JsInvocation setterCall(@NotNull JsExpression assignTo) {
-        JsInvocation setterCall =
-                PropertyAccessTranslator.translateAsPropertySetterCall(expression.getLeft(), context());
-        setterCall.setArguments(assignTo);
-        return setterCall;
+    private JsExpression translateAsUnOverloadableBinaryOperation() {
+        JetToken token = getOperationToken(expression);
+        JsBinaryOperator operator = OperatorTable.getBinaryOperator(token);
+        assert OperatorConventions.NOT_OVERLOADABLE.contains(token);
+        JsExpression left = translateLeftExpression(context(), expression);
+        JsExpression right = translateRightExpression(context(), expression);
+        return new JsBinaryOperation(operator, left, right);
     }
 
 }

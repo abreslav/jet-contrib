@@ -1,4 +1,4 @@
-package org.jetbrains.k2js.intrinsic;
+package org.jetbrains.k2js.translate.intrinsic;
 
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -30,7 +30,9 @@ public final class IntrinsicDeclarationVisitor extends DeclarationDescriptorVisi
 
     @Override
     public Void visitFunctionDescriptor(@NotNull FunctionDescriptor descriptor, @Nullable Void nothing) {
-        intrinsics.declareIntrinsic(descriptor);
+        if (!intrinsics.isIntrinsic(descriptor)) {
+            intrinsics.declareIntrinsic(descriptor);
+        }
         return null;
     }
 }

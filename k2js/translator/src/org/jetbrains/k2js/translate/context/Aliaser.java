@@ -1,4 +1,4 @@
-package org.jetbrains.k2js.translate.general;
+package org.jetbrains.k2js.translate.context;
 
 import com.google.dart.compiler.backend.js.ast.JsName;
 import com.google.dart.compiler.backend.js.ast.JsNameRef;
@@ -6,18 +6,17 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jet.lang.descriptors.DeclarationDescriptor;
 import org.jetbrains.jet.lang.types.JetStandardLibrary;
-import org.jetbrains.k2js.translate.utils.Namer;
 
 import java.util.HashMap;
 import java.util.Map;
 
+//TODO: implement aliases stack for this
 public class Aliaser {
 
     static public Aliaser aliasesForStandardClasses(@NotNull JetStandardLibrary standardLibrary,
                                                     @NotNull Namer namer) {
-        Aliaser result = new Aliaser();
-        result.setAliasForDescriptor(standardLibrary.getArray(), namer.declareStandardClass("Array"));
-        return result;
+        //TODO: decide if this aliases are needed
+        return new Aliaser();
     }
 
     @NotNull
