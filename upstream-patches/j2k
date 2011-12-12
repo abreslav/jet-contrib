@@ -40,10 +40,10 @@ index 6fd690e..729541e 100644
           <keyboard-shortcut keymap="$default" first-keystroke="control alt shift E"/>
 diff --git a/idea/src/org/jetbrains/jet/plugin/actions/JavaToKotlinAction.java b/idea/src/org/jetbrains/jet/plugin/actions/JavaToKotlinAction.java
 new file mode 100644
-index 0000000..48d8736
+index 0000000..4beca75
 --- /dev/null
 +++ b/idea/src/org/jetbrains/jet/plugin/actions/JavaToKotlinAction.java
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,86 @@
 +package org.jetbrains.jet.plugin.actions;
 +
 +import com.intellij.ide.highlighter.JavaFileType;
@@ -53,6 +53,7 @@ index 0000000..48d8736
 +import com.intellij.openapi.command.CommandProcessor;
 +import com.intellij.openapi.fileEditor.FileEditorManager;
 +import com.intellij.openapi.project.Project;
++import com.intellij.openapi.ui.Messages;
 +import com.intellij.openapi.vfs.VirtualFile;
 +import com.intellij.psi.PsiFile;
 +
@@ -71,6 +72,11 @@ index 0000000..48d8736
 +        final Project project = PlatformDataKeys.PROJECT.getData(e.getDataContext());
 +        assert virtualFiles != null;
 +        assert project != null;
++        int result = Messages.showYesNoCancelDialog(project,
++                                                    "Would you like to backup Java files?",
++                                                    "Backup",
++                                                    Messages.getQuestionIcon());
++        final boolean finalRemoveIt = needToRemoveFiles(result);
 +        final List<PsiFile> allJavaFiles = getAllJavaFiles(virtualFiles, project);
 +
 +        clearClassIdentifiers();
@@ -87,7 +93,12 @@ index 0000000..48d8736
 +                    @Override
 +                    public void run() {
 +                        final List<VirtualFile> newFiles = performFiles(allJavaFilesNear);
-+                        deleteFiles(allJavaFilesNear);
++                        if (finalRemoveIt) {
++                            deleteFiles(allJavaFilesNear);
++                        }
++                        else {
++                            renameFiles(allJavaFiles);
++                        }
 +                        reformatFiles(newFiles, project);
 +                        for (VirtualFile vf : newFiles) {
 +                            FileEditorManager.getInstance(project).openFile(vf, true);
@@ -97,6 +108,19 @@ index 0000000..48d8736
 +                "Convert files from Java to Kotlin",
 +                "group_id"
 +        );
++    }
++
++    private static boolean needToRemoveFiles(int result) {
++        boolean removeIt = false;
++        switch (result) {
++            case 0:
++                removeIt = false;
++                break;
++            case 1:
++                removeIt = true;
++                break;
++        }
++        return removeIt;
 +    }
 +
 +    @Override
@@ -109,10 +133,10 @@ index 0000000..48d8736
 \ No newline at end of file
 diff --git a/idea/src/org/jetbrains/jet/plugin/actions/JavaToKotlinActionUtil.java b/idea/src/org/jetbrains/jet/plugin/actions/JavaToKotlinActionUtil.java
 new file mode 100644
-index 0000000..90967c1
+index 0000000..76ba26c
 --- /dev/null
 +++ b/idea/src/org/jetbrains/jet/plugin/actions/JavaToKotlinActionUtil.java
-@@ -0,0 +1,132 @@
+@@ -0,0 +1,154 @@
 +package org.jetbrains.jet.plugin.actions;
 +
 +import com.intellij.ide.highlighter.JavaFileType;
@@ -137,6 +161,9 @@ index 0000000..90967c1
 + * @author ignatov
 + */
 +public class JavaToKotlinActionUtil {
++    private JavaToKotlinActionUtil() {
++    }
++
 +    static void setClassIdentifiers(@NotNull PsiFile psiFile) {
 +        ClassVisitor c = new ClassVisitor();
 +        psiFile.accept(c);
@@ -243,6 +270,25 @@ index 0000000..90967c1
 +            MessagesEx.error(psiFile.getProject(), ex.getMessage()).showLater();
 +        }
 +        return null;
++    }
++
++    static void renameFiles(@NotNull List<PsiFile> psiFiles) {
++        for (final PsiFile f : psiFiles) {
++            ApplicationManager.getApplication().runWriteAction(new Runnable() {
++                @Override
++                public void run() {
++                    try {
++                        PsiManager manager = f.getManager();
++                        VirtualFile vFile = f.getVirtualFile();
++                        if (vFile != null) {
++                            vFile.copy(manager, vFile.getParent(), vFile.getNameWithoutExtension() + ".java.old");
++                            vFile.delete(manager);
++                        }
++                    } catch (IOException ignored) {
++                    }
++                }
++            });
++        }
 +    }
 +}
 diff --git a/j2k/j2k.iml b/j2k/j2k.iml
