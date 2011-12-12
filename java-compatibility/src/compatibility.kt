@@ -12,13 +12,14 @@ fun <T> array(vararg t : T) : Array<T> = t
 val <T> Array<T>?.length : Int get() = this.sure().size
 //val <T> Array<T>?.length : Int get() = if (this!=null) this.size else throw NullPointerException()
 fun <T> Array<T>?.get(i: Int) : T { if (this != null) return this.get(i) as T else throw NullPointerException() }
+//fun <T> Array<T>?.get(i : Int?) = this.sure().get(i.sure())
 fun <T> Array<T>?.set(i: Int, value: T) { if (this != null) return this.set(i, value) else throw NullPointerException() }
 
 // "constructors" for primitive types array
 fun DoubleArray(vararg content : Double) : DoubleArray = content
 fun FloatArray(vararg content : Float) : FloatArray = content
 fun LongArray(vararg content : Long) : LongArray = content
-//fun IntArray(vararg content : Int) : IntArray = content
+fun IntArrayConstructor(vararg content : Int) : IntArray = content
 fun CharArray(vararg content : Char) : CharArray = content
 fun ShortArray(vararg content : Short) : ShortArray = content
 fun ByteArray(vararg content : Byte) : ByteArray = content
