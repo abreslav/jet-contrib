@@ -23,7 +23,7 @@ index 061858a..50f1bf2 100644
  </module>
  
 diff --git a/idea/src/META-INF/plugin.xml b/idea/src/META-INF/plugin.xml
-index a42a55f..e25fd95 100644
+index 6fd690e..729541e 100644
 --- a/idea/src/META-INF/plugin.xml
 +++ b/idea/src/META-INF/plugin.xml
 @@ -24,6 +24,11 @@
@@ -40,65 +40,129 @@ index a42a55f..e25fd95 100644
           <keyboard-shortcut keymap="$default" first-keystroke="control alt shift E"/>
 diff --git a/idea/src/org/jetbrains/jet/plugin/actions/JavaToKotlinAction.java b/idea/src/org/jetbrains/jet/plugin/actions/JavaToKotlinAction.java
 new file mode 100644
-index 0000000..55a4c01
+index 0000000..48d8736
 --- /dev/null
 +++ b/idea/src/org/jetbrains/jet/plugin/actions/JavaToKotlinAction.java
-@@ -0,0 +1,156 @@
+@@ -0,0 +1,62 @@
 +package org.jetbrains.jet.plugin.actions;
 +
-+import com.intellij.codeInsight.actions.ReformatCodeProcessor;
 +import com.intellij.ide.highlighter.JavaFileType;
 +import com.intellij.openapi.actionSystem.AnAction;
 +import com.intellij.openapi.actionSystem.AnActionEvent;
 +import com.intellij.openapi.actionSystem.PlatformDataKeys;
-+import com.intellij.openapi.application.ApplicationManager;
 +import com.intellij.openapi.command.CommandProcessor;
++import com.intellij.openapi.fileEditor.FileEditorManager;
++import com.intellij.openapi.project.Project;
++import com.intellij.openapi.vfs.VirtualFile;
++import com.intellij.psi.PsiFile;
++
++import java.util.List;
++
++import static org.jetbrains.jet.j2k.Converter.clearClassIdentifiers;
++import static org.jetbrains.jet.plugin.actions.JavaToKotlinActionUtil.*;
++
++/**
++ * @author ignatov
++ */
++public class JavaToKotlinAction extends AnAction {
++    @Override
++    public void actionPerformed(final AnActionEvent e) {
++        VirtualFile[] virtualFiles = e.getData(PlatformDataKeys.VIRTUAL_FILE_ARRAY);
++        final Project project = PlatformDataKeys.PROJECT.getData(e.getDataContext());
++        assert virtualFiles != null;
++        assert project != null;
++        final List<PsiFile> allJavaFiles = getAllJavaFiles(virtualFiles, project);
++
++        clearClassIdentifiers();
++        for (PsiFile f : allJavaFiles) {
++            if (f.getFileType() instanceof JavaFileType) {
++                setClassIdentifiers(f);
++            }
++        }
++
++        final List<PsiFile> allJavaFilesNear = getAllJavaFiles(virtualFiles, project);
++        CommandProcessor.getInstance().executeCommand(
++                project,
++                new Runnable() {
++                    @Override
++                    public void run() {
++                        final List<VirtualFile> newFiles = performFiles(allJavaFilesNear);
++                        deleteFiles(allJavaFilesNear);
++                        reformatFiles(newFiles, project);
++                        for (VirtualFile vf : newFiles) {
++                            FileEditorManager.getInstance(project).openFile(vf, true);
++                        }
++                    }
++                },
++                "Convert files from Java to Kotlin",
++                "group_id"
++        );
++    }
++
++    @Override
++    public void update(AnActionEvent e) {
++        final boolean enabled = e.getData(PlatformDataKeys.VIRTUAL_FILE_ARRAY) != null;
++        e.getPresentation().setVisible(enabled);
++        e.getPresentation().setEnabled(enabled);
++    }
++}
+\ No newline at end of file
+diff --git a/idea/src/org/jetbrains/jet/plugin/actions/JavaToKotlinActionUtil.java b/idea/src/org/jetbrains/jet/plugin/actions/JavaToKotlinActionUtil.java
+new file mode 100644
+index 0000000..90967c1
+--- /dev/null
++++ b/idea/src/org/jetbrains/jet/plugin/actions/JavaToKotlinActionUtil.java
+@@ -0,0 +1,132 @@
++package org.jetbrains.jet.plugin.actions;
++
++import com.intellij.ide.highlighter.JavaFileType;
++import com.intellij.openapi.application.ApplicationManager;
 +import com.intellij.openapi.project.Project;
 +import com.intellij.openapi.ui.ex.MessagesEx;
 +import com.intellij.openapi.vfs.CharsetToolkit;
 +import com.intellij.openapi.vfs.VirtualFile;
-+import com.intellij.psi.PsiDirectory;
 +import com.intellij.psi.PsiFile;
 +import com.intellij.psi.PsiJavaFile;
 +import com.intellij.psi.PsiManager;
++import com.intellij.psi.codeStyle.CodeStyleManager;
 +import org.jetbrains.annotations.NotNull;
 +import org.jetbrains.annotations.Nullable;
 +import org.jetbrains.jet.j2k.Converter;
 +import org.jetbrains.jet.j2k.visitors.ClassVisitor;
 +
 +import java.io.IOException;
-+import java.util.ArrayList;
-+import java.util.Arrays;
-+import java.util.LinkedList;
-+import java.util.List;
++import java.util.*;
 +
 +/**
 + * @author ignatov
 + */
-+public class JavaToKotlinAction extends AnAction {
-+    private static void setClassIdentifiers(@NotNull PsiFile psiFile) {
++public class JavaToKotlinActionUtil {
++    static void setClassIdentifiers(@NotNull PsiFile psiFile) {
 +        ClassVisitor c = new ClassVisitor();
 +        psiFile.accept(c);
 +        Converter.setClassIdentifiers(c.getClassIdentifiers());
 +    }
 +
 +    @NotNull
-+    private static VirtualFile[] getChildrenRecursive(@Nullable VirtualFile baseDir) {
++    private static List<VirtualFile> getChildrenRecursive(@Nullable VirtualFile baseDir) {
 +        List<VirtualFile> result = new LinkedList<VirtualFile>();
 +        VirtualFile[] children = baseDir != null ? baseDir.getChildren() : VirtualFile.EMPTY_ARRAY;
 +        result.addAll(Arrays.asList(children));
 +        for (VirtualFile f : children)
-+            result.addAll(Arrays.asList(getChildrenRecursive(f)));
-+
-+        return result.toArray(new VirtualFile[result.size()]);
++            result.addAll(getChildrenRecursive(f));
++        return result;
 +    }
 +
 +    @NotNull
-+    private static List<PsiFile> getAllJavaFiles(@NotNull VirtualFile baseDir, Project project) {
++    static List<PsiFile> getAllJavaFiles(@NotNull VirtualFile[] vFiles, Project project) {
 +        final PsiManager manager = PsiManager.getInstance(project);
-+        VirtualFile[] files = getChildrenRecursive(baseDir);
++        Set<VirtualFile> filesSet = new HashSet<VirtualFile>();
++        for (VirtualFile f : vFiles) {
++            filesSet.add(f);
++            filesSet.addAll(getChildrenRecursive(f));
++        }
 +        final List<PsiFile> res = new ArrayList<PsiFile>();
-+        for (final VirtualFile file : files) {
++        for (final VirtualFile file : filesSet) {
 +            final PsiFile psiFile = manager.findFile(file);
 +            if (psiFile != null && psiFile.getFileType() instanceof JavaFileType) {
 +                res.add(psiFile);
@@ -107,53 +171,39 @@ index 0000000..55a4c01
 +        return res;
 +    }
 +
-+    @Override
-+    public void actionPerformed(final AnActionEvent e) {
-+        final VirtualFile virtualFile = e.getData(PlatformDataKeys.VIRTUAL_FILE);
-+        final Project project = PlatformDataKeys.PROJECT.getData(e.getDataContext());
-+        assert virtualFile != null;
-+        assert project != null;
-+        final List<PsiFile> allJavaFiles = getAllJavaFiles(virtualFile, project);
-+
-+        Converter.clearClassIdentifiers();
-+        for (PsiFile f : allJavaFiles) {
-+            if (f.getFileType() instanceof JavaFileType) {
-+                setClassIdentifiers(f);
-+            }
-+        }
-+
-+        final List<PsiFile> allJavaFilesNear = getAllJavaFiles(virtualFile, project);
-+        final String group_id = "group_id";
-+        CommandProcessor.getInstance().executeCommand(
-+                project,
-+                new Runnable() {
-+                    @Override
-+                    public void run() {
-+                        performFiles(allJavaFilesNear);
-+                        deleteFiles(allJavaFilesNear);
-+                        final PsiManager manager = PsiManager.getInstance(project);
-+                        PsiDirectory directory = manager.findDirectory(virtualFile);
-+                        if (directory != null) {
-+                            new ReformatCodeProcessor(project, directory, true).run();
-+                        }
-+                    }
-+                },
-+                "Convert " + virtualFile.getName() + " from Java to Kotlin",
-+                group_id
-+        );
-+    }
-+
-+    private static void performFiles(List<PsiFile> allJavaFilesNear) {
-+        for (final PsiFile f : allJavaFilesNear)
++    static void reformatFiles(List<VirtualFile> allJetFiles, final Project project) {
++        for (final VirtualFile vf : allJetFiles)
 +            ApplicationManager.getApplication().runWriteAction(new Runnable() {
 +                @Override
 +                public void run() {
-+                    performOneFile(f);
++                    if (vf != null) {
++                        PsiFile psiFile = PsiManager.getInstance(project).findFile(vf);
++                        if (psiFile != null) {
++                            CodeStyleManager.getInstance(project).reformat(psiFile);
++                        }
++                    }
 +                }
 +            });
 +    }
 +
-+    private static void deleteFiles(List<PsiFile> allJavaFilesNear) {
++    @NotNull
++    static List<VirtualFile> performFiles(List<PsiFile> allJavaFilesNear) {
++        final List<VirtualFile> result = new LinkedList<VirtualFile>();
++        for (final PsiFile f : allJavaFilesNear) {
++            ApplicationManager.getApplication().runWriteAction(new Runnable() {
++                @Override
++                public void run() {
++                    VirtualFile vf = performOneFile(f);
++                    if (vf != null) {
++                        result.add(vf);
++                    }
++                }
++            });
++        }
++        return result;
++    }
++
++    static void deleteFiles(List<PsiFile> allJavaFilesNear) {
 +        for (final PsiFile f : allJavaFilesNear) {
 +            ApplicationManager.getApplication().runWriteAction(new Runnable() {
 +                @Override
@@ -171,7 +221,8 @@ index 0000000..55a4c01
 +        }
 +    }
 +
-+    private static void performOneFile(PsiFile psiFile) {
++    @Nullable
++    private static VirtualFile performOneFile(PsiFile psiFile) {
 +        try {
 +            VirtualFile virtualFile = psiFile.getVirtualFile();
 +            if (psiFile instanceof PsiJavaFile && virtualFile != null) {
@@ -186,21 +237,14 @@ index 0000000..55a4c01
 +                assert manager != null;
 +                VirtualFile copy = virtualFile.copy(manager, virtualFile.getParent(), virtualFile.getNameWithoutExtension() + ".kt");
 +                copy.setBinaryContent(CharsetToolkit.getUtf8Bytes(result));
++                return copy;
 +            }
 +        } catch (Exception ex) {
 +            MessagesEx.error(psiFile.getProject(), ex.getMessage()).showLater();
 +        }
-+    }
-+
-+    @Override
-+    public void update(AnActionEvent e) {
-+        final VirtualFile vf = e.getData(PlatformDataKeys.VIRTUAL_FILE);
-+        final boolean enabled = vf != null && vf.isDirectory();
-+        e.getPresentation().setVisible(enabled);
-+        e.getPresentation().setEnabled(enabled);
++        return null;
 +    }
 +}
-\ No newline at end of file
 diff --git a/j2k/j2k.iml b/j2k/j2k.iml
 new file mode 100644
 index 0000000..538b979
@@ -415,10 +459,10 @@ index 0000000..0725715
 +
 diff --git a/j2k/src/org/jetbrains/jet/j2k/Converter.java b/j2k/src/org/jetbrains/jet/j2k/Converter.java
 new file mode 100644
-index 0000000..509704c
+index 0000000..8842561
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/Converter.java
-@@ -0,0 +1,542 @@
+@@ -0,0 +1,547 @@
 +package org.jetbrains.jet.j2k;
 +
 +import com.intellij.psi.*;
@@ -441,16 +485,14 @@ index 0000000..509704c
 +public class Converter {
 +  private final static Set<String> NOT_NULL_ANNOTATIONS = new HashSet<String>() {
 +    {
-+     add("org.jetbrains.annotations.NotNull");
-+     add("com.sun.istack.internal.NotNull");
-+     add("javax.annotation.Nonnull");
++      add("org.jetbrains.annotations.NotNull");
++      add("com.sun.istack.internal.NotNull");
++      add("javax.annotation.Nonnull");
 +    }
-+  } ;
-+  private static Set<String> ourClassIdentifiers = new HashSet<String>();
-+  private static final Dispatcher ourDispatcher = new Dispatcher();
-+//  private static ExpressionVisitor ourExpressionVisitor = new ExpressionVisitor();
-+
-+  private static final java.lang.Class<ExpressionVisitor> visitorClass = ExpressionVisitor.class;
++  };
++  @NotNull private static Set<String> ourClassIdentifiers = new HashSet<String>();
++  @NotNull private static final Dispatcher ourDispatcher = new Dispatcher();
++  @Nullable private static PsiType ourMethodReturnType = null;
 +
 +  public static void setClassIdentifiers(Set<String> identifiers) {
 +    ourClassIdentifiers = identifiers;
@@ -458,6 +500,11 @@ index 0000000..509704c
 +
 +  public static Set<String> getClassIdentifiers() {
 +    return new HashSet<String>(ourClassIdentifiers);
++  }
++
++  @Nullable
++  public static PsiType getMethodReturnType() {
++    return ourMethodReturnType;
 +  }
 +
 +  public static void clearClassIdentifiers() {
@@ -724,6 +771,8 @@ index 0000000..509704c
 +    else
 +      ourDispatcher.setExpressionVisitor(new ExpressionVisitor());
 +
++    ourMethodReturnType = method.getReturnType();
++
 +    final IdentifierImpl identifier = new IdentifierImpl(method.getName());
 +    final Type returnType = typeToType(method.getReturnType(), isNotNull(method.getModifierList()));
 +    final Block body = blockToBlock(method.getBody(), notEmpty);
@@ -933,10 +982,10 @@ index 0000000..509704c
 +
 +  private static boolean isReadOnly(PsiParameter parameter) {
 +    for (PsiReference r : (ReferencesSearch.search(parameter))) {
-+        if (r instanceof PsiExpression && PsiUtil.isAccessedForWriting((PsiExpression) r)) {
-+          return false;
-+        }
++      if (r instanceof PsiExpression && PsiUtil.isAccessedForWriting((PsiExpression) r)) {
++        return false;
 +      }
++    }
 +    return true;
 +  }
 +
@@ -2752,10 +2801,10 @@ index 0000000..e0fff02
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/MethodCallExpression.java b/j2k/src/org/jetbrains/jet/j2k/ast/MethodCallExpression.java
 new file mode 100644
-index 0000000..0c8a1d2
+index 0000000..5bfc87b
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/MethodCallExpression.java
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,42 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -2768,13 +2817,19 @@ index 0000000..0c8a1d2
 + */
 +public class MethodCallExpression extends Expression {
 +  private final Expression myMethodCall;
-+  private final Element myParamList;
++  private final List<Expression> myArguments;
++  private List<String> myConversions;
 +  private final boolean myIsResultNullable;
 +  private final List<Type> myTypeParameters;
 +
-+  public MethodCallExpression(Expression methodCall, Element paramList, boolean nullable, List<Type> typeParameters) {
++  public MethodCallExpression(Expression methodCall, List<Expression> arguments, boolean nullable, List<Type> typeParameters) {
++    this(methodCall, arguments, AstUtil.createListWithEmptyString(arguments), nullable, typeParameters);
++  }
++
++  public MethodCallExpression(Expression methodCall, List<Expression> arguments, List<String> conversions, boolean nullable, List<Type> typeParameters) {
 +    myMethodCall = methodCall;
-+    myParamList = paramList;
++    myArguments = arguments;
++    myConversions = conversions;
 +    myIsResultNullable = nullable;
 +    myTypeParameters = typeParameters;
 +  }
@@ -2788,7 +2843,8 @@ index 0000000..0c8a1d2
 +  @Override
 +  public String toKotlin() {
 +    String typeParamsToKotlin = myTypeParameters.size() > 0 ? "<" + AstUtil.joinNodes(myTypeParameters, COMMA_WITH_SPACE) + ">" : EMPTY;
-+    return myMethodCall.toKotlin() + typeParamsToKotlin + "(" + myParamList.toKotlin() + ")";
++    List<String> applyConversions = AstUtil.applyConversions(AstUtil.nodesToKotlin(myArguments), myConversions);
++    return myMethodCall.toKotlin() + typeParamsToKotlin + "(" + AstUtil.join(applyConversions, COMMA_WITH_SPACE) + ")";
 +  }
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Modifier.java b/j2k/src/org/jetbrains/jet/j2k/ast/Modifier.java
@@ -2816,33 +2872,40 @@ index 0000000..9292094
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/NewClassExpression.java b/j2k/src/org/jetbrains/jet/j2k/ast/NewClassExpression.java
 new file mode 100644
-index 0000000..30185d2
+index 0000000..87a5a51
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/NewClassExpression.java
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,45 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
 +import org.jetbrains.annotations.Nullable;
++import org.jetbrains.jet.j2k.util.AstUtil;
++
++import java.util.List;
 +
 +/**
 + * @author ignatov
 + */
 +public class NewClassExpression extends Expression {
 +  private final Element myName;
-+  private final Element myArguments;
++  private final List<Expression> myArguments;
 +  private Expression myQualifier;
++  private List<String> myConversions;
 +  private AnonymousClass myAnonymousClass = null;
 +
-+  public NewClassExpression(Element name, Element arguments) {
++  public NewClassExpression(Element name, List<Expression> arguments) {
 +    myName = name;
 +    myQualifier = EMPTY_EXPRESSION;
 +    myArguments = arguments;
++    myConversions = AstUtil.createListWithEmptyString(arguments);
 +  }
 +
-+  public NewClassExpression(Expression qualifier, Element name, Element arguments, @Nullable AnonymousClass anonymousClass) {
++  public NewClassExpression(@NotNull Expression qualifier, @NotNull Element name, @NotNull List<Expression> arguments,
++                            @NotNull List<String> conversions, @Nullable AnonymousClass anonymousClass) {
 +    this(name, arguments);
 +    myQualifier = qualifier;
++    myConversions = conversions;
 +    myAnonymousClass = anonymousClass;
 +  }
 +
@@ -2851,9 +2914,11 @@ index 0000000..30185d2
 +  public String toKotlin() {
 +    final String callOperator = myQualifier.isNullable() ? QUESTDOT : DOT;
 +    final String qualifier = myQualifier.isEmpty() ? EMPTY : myQualifier.toKotlin() + callOperator;
++    List<String> applyConversions = AstUtil.applyConversions(AstUtil.nodesToKotlin(myArguments), myConversions);
++    String appliedArguments = AstUtil.join(applyConversions, COMMA_WITH_SPACE);
 +    return myAnonymousClass != null ?
-+      "object" + SPACE + ":" + SPACE + qualifier + myName.toKotlin() + "(" + myArguments.toKotlin() + ")" + myAnonymousClass.toKotlin() :
-+      qualifier + myName.toKotlin() + "(" + myArguments.toKotlin() + ")";
++      "object" + SPACE + ":" + SPACE + qualifier + myName.toKotlin() + "(" + appliedArguments + ")" + myAnonymousClass.toKotlin() :
++      qualifier + myName.toKotlin() + "(" + appliedArguments + ")";
 +  }
 +}
 \ No newline at end of file
@@ -3179,28 +3244,35 @@ index 0000000..c557edf
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/ReturnStatement.java b/j2k/src/org/jetbrains/jet/j2k/ast/ReturnStatement.java
 new file mode 100644
-index 0000000..b4040c3
+index 0000000..bf2e7ca
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/ReturnStatement.java
-@@ -0,0 +1,20 @@
+@@ -0,0 +1,27 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
++import org.jetbrains.jet.j2k.util.AstUtil;
 +
 +/**
 + * @author ignatov
 + */
 +public class ReturnStatement extends Statement {
 +  private final Expression myExpression;
++  private String myConversion = EMPTY;
 +
 +  public ReturnStatement(Expression expression) {
 +    myExpression = expression;
 +  }
 +
++  public ReturnStatement(final Expression expression, final String conversion) {
++    this(expression);
++    myConversion = conversion;
++  }
++
 +  @NotNull
 +  @Override
 +  public String toKotlin() {
-+    return "return" + SPACE + myExpression.toKotlin();
++    return "return" + SPACE + AstUtil.applyConversionForOneItem(myExpression.toKotlin(), myConversion);
 +  }
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/StarProjectionType.java b/j2k/src/org/jetbrains/jet/j2k/ast/StarProjectionType.java
@@ -3641,16 +3713,19 @@ index 0000000..8502370
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/util/AstUtil.java b/j2k/src/org/jetbrains/jet/j2k/util/AstUtil.java
 new file mode 100644
-index 0000000..d571526
+index 0000000..3c96203
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/util/AstUtil.java
-@@ -0,0 +1,47 @@
+@@ -0,0 +1,81 @@
 +package org.jetbrains.jet.j2k.util;
 +
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.jet.j2k.ast.Expression;
 +import org.jetbrains.jet.j2k.ast.INode;
 +
 +import java.util.LinkedList;
 +import java.util.List;
++import java.util.Map;
 +
 +/**
 + * @author ignatov
@@ -3690,6 +3765,37 @@ index 0000000..d571526
 +
 +  public static String upperFirstCharacter(String string) {
 +    return string.substring(0, 1).toUpperCase() + string.substring(1);
++  }
++
++  public static List<String> createListWithEmptyString(final List<Expression> arguments) {
++    final List<String> conversions = new LinkedList<String>();
++    //noinspection UnusedDeclaration
++    for (Expression argument : arguments) conversions.add("");
++    return conversions;
++  }
++
++  @NotNull
++  public static List<String> applyConversions(@NotNull List<String> first, @NotNull List<String> second) {
++    List<String> result = new LinkedList<String>();
++    assert first.size() == second.size() : "Lists must have the same size.";
++    for (int i = 0; i < first.size(); i++) {
++      result.add(applyConversionForOneItem(first.get(i), second.get(i)));
++    }
++    return result;
++  }
++
++  @NotNull
++  public static String applyConversionForOneItem(@NotNull String f, @NotNull String s) {
++    if (s.isEmpty())
++      return f;
++    else
++      return "(" + f + ")" + s;
++  }
++
++  public static <T> T getOrElse(Map<T, T> map, T e, T orElse) {
++    if (map.containsKey(e))
++      return map.get(e);
++    return orElse;
 +  }
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/ElementVisitor.java b/j2k/src/org/jetbrains/jet/j2k/visitors/ElementVisitor.java
@@ -3792,10 +3898,10 @@ index 0000000..f18a5f0
 \ No newline at end of file
 diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/ExpressionVisitor.java b/j2k/src/org/jetbrains/jet/j2k/visitors/ExpressionVisitor.java
 new file mode 100644
-index 0000000..7654d99
+index 0000000..233e97f
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/visitors/ExpressionVisitor.java
-@@ -0,0 +1,452 @@
+@@ -0,0 +1,534 @@
 +package org.jetbrains.jet.j2k.visitors;
 +
 +import com.intellij.psi.*;
@@ -3804,9 +3910,9 @@ index 0000000..7654d99
 +import org.jetbrains.annotations.Nullable;
 +import org.jetbrains.jet.j2k.Converter;
 +import org.jetbrains.jet.j2k.ast.*;
++import org.jetbrains.jet.j2k.util.AstUtil;
 +
-+import java.util.Collections;
-+import java.util.List;
++import java.util.*;
 +
 +import static org.jetbrains.jet.j2k.Converter.*;
 +
@@ -3988,14 +4094,93 @@ index 0000000..7654d99
 +  @Override
 +  public void visitMethodCallExpression(@NotNull PsiMethodCallExpression expression) {
 +    super.visitMethodCallExpression(expression);
-+    if (!SuperVisitor.isSuper(expression.getMethodExpression()) || !isInsidePrimaryConstructor(expression))
++    if (!SuperVisitor.isSuper(expression.getMethodExpression()) || !isInsidePrimaryConstructor(expression)) {
 +      myResult = // TODO: not resolved
 +        new MethodCallExpression(
 +          expressionToExpression(expression.getMethodExpression()),
-+          elementToElement(expression.getArgumentList()),
++          expressionsToExpressionList(expression.getArgumentList().getExpressions()),
++          createConversions(expression),
 +          typeToType(expression.getType()).isNullable(),
 +          typesToTypeList(expression.getTypeArguments())
 +        );
++    }
++  }
++
++  @NotNull
++  private static List<String> createConversions(@NotNull PsiCallExpression expression) {
++    List<String> conversions = new LinkedList<String>();
++    PsiExpressionList argumentList = expression.getArgumentList();
++    PsiExpression[] arguments = argumentList != null? argumentList.getExpressions() : new PsiExpression[]{};
++    //noinspection UnusedDeclaration
++    for (final PsiExpression a : arguments) {
++      conversions.add("");
++    }
++
++    PsiMethod resolve = expression.resolveMethod();
++    if (resolve != null) {
++      List<PsiType> expectedTypes = new LinkedList<PsiType>();
++      List<PsiType> actualTypes = new LinkedList<PsiType>();
++
++      for (PsiParameter p : resolve.getParameterList().getParameters())
++        expectedTypes.add(p.getType());
++
++      for (PsiExpression e : arguments)
++        actualTypes.add(e.getType());
++
++      assert actualTypes.size() == expectedTypes.size() : "The type list must have the same length";
++
++      for (int i = 0; i < actualTypes.size(); i++) {
++        PsiType actual = actualTypes.get(i);
++        PsiType expected = expectedTypes.get(i);
++
++        if (isConversionNeeded(actual, expected)) {
++          conversions.set(i, getPrimitiveTypeConversion(expected.getCanonicalText()));
++        }
++      }
++    }
++    return conversions;
++  }
++
++  static boolean isConversionNeeded(@Nullable final PsiType actual,@Nullable final PsiType expected) {
++    if (actual == null || expected == null)
++      return false;
++    Map<String, String> typeMap = new HashMap<String, String>();
++    typeMap.put("java.lang.Byte", "byte");
++    typeMap.put("java.lang.Short", "short");
++    typeMap.put("java.lang.Integer", "int");
++    typeMap.put("java.lang.Long", "long");
++    typeMap.put("java.lang.Float", "float");
++    typeMap.put("java.lang.Double", "double");
++    typeMap.put("java.lang.Character", "char");
++    String expectedStr = expected.getCanonicalText();
++    String actualStr = actual.getCanonicalText();
++    boolean o1 = AstUtil.getOrElse(typeMap, actualStr, "").equals(expectedStr);
++    boolean o2 = AstUtil.getOrElse(typeMap, expectedStr, "").equals(actualStr);
++    return !actualStr.equals(expectedStr) && (!(o1 ^ o2));
++  }
++
++  @NotNull
++  static String getPrimitiveTypeConversion(@NotNull String type) {
++    Map<String, String> conversions = new HashMap<String, String>();
++    conversions.put("byte", "byt");
++    conversions.put("short", "sht");
++    conversions.put("int", "int");
++    conversions.put("long", "lng");
++    conversions.put("float", "flt");
++    conversions.put("double", "dbl");
++    conversions.put("char", "chr");
++
++    conversions.put("java.lang.Byte", "byt");
++    conversions.put("java.lang.Short", "sht");
++    conversions.put("java.lang.Integer", "int");
++    conversions.put("java.lang.Long", "lng");
++    conversions.put("java.lang.Float", "flt");
++    conversions.put("java.lang.Double", "dbl");
++    conversions.put("java.lang.Character", "chr");
++
++    if (conversions.containsKey(type))
++      return "." + conversions.get(type);
++    return "";
 +  }
 +
 +  @Override
@@ -4022,11 +4207,14 @@ index 0000000..7654d99
 +    final PsiMethod constructor = expression.resolveMethod();
 +    PsiJavaCodeReferenceElement classReference = expression.getClassOrAnonymousClassReference();
 +    final boolean isNotConvertedClass = classReference != null && !Converter.getClassIdentifiers().contains(classReference.getQualifiedName());
++    PsiExpressionList argumentList = expression.getArgumentList();
++    PsiExpression[] arguments = argumentList != null ? argumentList.getExpressions() : new PsiExpression[]{};
 +    if (constructor == null || isConstructorPrimary(constructor) || isNotConvertedClass) {
 +      return new NewClassExpression(
 +        expressionToExpression(expression.getQualifier()),
 +        elementToElement(classReference),
-+        elementToElement(expression.getArgumentList()),
++        expressionsToExpressionList(arguments),
++        createConversions(expression),
 +        anonymousClass != null ? anonymousClassToAnonymousClass(anonymousClass) : null
 +      );
 +    }
@@ -4037,7 +4225,7 @@ index 0000000..7654d99
 +      new IdentifierImpl(constructor.getName(), false),
 +      new MethodCallExpression(
 +        new IdentifierImpl("init"),
-+        elementToElement(expression.getArgumentList()),
++        expressionsToExpressionList(arguments),
 +        false,
 +        typeParameters));
 +  }
@@ -4048,7 +4236,7 @@ index 0000000..7654d99
 +    callExpression.add(new IdentifierImpl("{null}")); // TODO: remove
 +    return new NewClassExpression(
 +      typeToType(expression.getType()),
-+      new ExpressionList(callExpression)
++      callExpression
 +    );
 +  }
 +
@@ -4251,10 +4439,10 @@ index 0000000..7654d99
 \ No newline at end of file
 diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/StatementVisitor.java b/j2k/src/org/jetbrains/jet/j2k/visitors/StatementVisitor.java
 new file mode 100644
-index 0000000..0e35617
+index 0000000..d971851
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/visitors/StatementVisitor.java
-@@ -0,0 +1,339 @@
+@@ -0,0 +1,350 @@
 +package org.jetbrains.jet.j2k.visitors;
 +
 +import com.intellij.psi.*;
@@ -4263,6 +4451,7 @@ index 0000000..0e35617
 +import com.intellij.psi.util.PsiUtil;
 +import org.jetbrains.annotations.NotNull;
 +import org.jetbrains.annotations.Nullable;
++import org.jetbrains.jet.j2k.Converter;
 +import org.jetbrains.jet.j2k.ast.*;
 +
 +import java.util.Arrays;
@@ -4271,6 +4460,8 @@ index 0000000..0e35617
 +import java.util.List;
 +
 +import static org.jetbrains.jet.j2k.Converter.*;
++import static org.jetbrains.jet.j2k.visitors.ExpressionVisitor.getPrimitiveTypeConversion;
++import static org.jetbrains.jet.j2k.visitors.ExpressionVisitor.isConversionNeeded;
 +
 +/**
 + * @author ignatov
@@ -4589,8 +4780,16 @@ index 0000000..0e35617
 +  @Override
 +  public void visitReturnStatement(PsiReturnStatement statement) {
 +    super.visitReturnStatement(statement);
++    PsiExpression returnValue = statement.getReturnValue();
++    String conversion = "";
++
++    PsiType methodReturnType = Converter.getMethodReturnType();
++    if (returnValue != null && methodReturnType != null && isConversionNeeded(returnValue.getType(), methodReturnType)) {
++      conversion = getPrimitiveTypeConversion(methodReturnType.getCanonicalText());
++    }
 +    myResult = new ReturnStatement(
-+      expressionToExpression(statement.getReturnValue())
++      expressionToExpression(returnValue),
++      conversion
 +    );
 +  }
 +}
