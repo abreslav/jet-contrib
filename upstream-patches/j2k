@@ -505,10 +505,10 @@ index 0000000..0725715
 +
 diff --git a/j2k/src/org/jetbrains/jet/j2k/Converter.java b/j2k/src/org/jetbrains/jet/j2k/Converter.java
 new file mode 100644
-index 0000000..2d714e2
+index 0000000..360c7cd
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/Converter.java
-@@ -0,0 +1,548 @@
+@@ -0,0 +1,552 @@
 +package org.jetbrains.jet.j2k;
 +
 +import com.intellij.psi.*;
@@ -529,6 +529,7 @@ index 0000000..2d714e2
 + * @author ignatov
 + */
 +public class Converter {
++  @NotNull
 +  private final static Set<String> NOT_NULL_ANNOTATIONS = new HashSet<String>() {
 +    {
 +      add("org.jetbrains.annotations.NotNull");
@@ -540,10 +541,11 @@ index 0000000..2d714e2
 +  @NotNull private static final Dispatcher ourDispatcher = new Dispatcher();
 +  @Nullable private static PsiType ourMethodReturnType = null;
 +
-+  public static void setClassIdentifiers(Set<String> identifiers) {
++  public static void setClassIdentifiers(@NotNull Set<String> identifiers) {
 +    ourClassIdentifiers = identifiers;
 +  }
 +
++  @NotNull
 +  public static Set<String> getClassIdentifiers() {
 +    return new HashSet<String>(ourClassIdentifiers);
 +  }
@@ -593,7 +595,8 @@ index 0000000..2d714e2
 +    return new AnonymousClass(getMembers(anonymousClass));
 +  }
 +
-+  private static List<Member> getMembers(PsiClass psiClass) {
++  @NotNull
++  private static List<Member> getMembers(@NotNull PsiClass psiClass) {
 +    List<Member> members = new LinkedList<Member>();
 +    for (PsiElement e : psiClass.getChildren()) {
 +      if (e instanceof PsiMethod) members.add(methodToFunction((PsiMethod) e, true));
@@ -735,7 +738,7 @@ index 0000000..2d714e2
 +  }
 +
 +  @NotNull
-+  private static Initializer initializerToInitializer(PsiClassInitializer i) {
++  private static Initializer initializerToInitializer(@NotNull PsiClassInitializer i) {
 +    return new Initializer(
 +      blockToBlock(i.getBody(), true),
 +      modifiersListToModifiersSet(i.getModifierList())
@@ -856,7 +859,7 @@ index 0000000..2d714e2
 +    );
 +  }
 +
-+  private static boolean isNotOpenMethod(final PsiMethod method) {
++  private static boolean isNotOpenMethod(@NotNull final PsiMethod method) {
 +    if (method.getParent() instanceof PsiClass) {
 +      final PsiModifierList parentModifierList = ((PsiClass) method.getParent()).getModifierList();
 +      if ((parentModifierList != null && parentModifierList.hasExplicitModifier(Modifier.FINAL)) || ((PsiClass) method.getParent()).isEnum())
@@ -965,6 +968,7 @@ index 0000000..2d714e2
 +    return result;
 +  }
 +
++  @NotNull
 +  public static Type typeToType(PsiType type, boolean notNull) {
 +    Type result = typeToType(type);
 +    if (notNull)
@@ -1027,7 +1031,7 @@ index 0000000..2d714e2
 +    return false;
 +  }
 +
-+  private static boolean isReadOnly(PsiParameter parameter) {
++  private static boolean isReadOnly(@NotNull PsiParameter parameter) {
 +    for (PsiReference r : (ReferencesSearch.search(parameter))) {
 +      if (r instanceof PsiExpression && PsiUtil.isAccessedForWriting((PsiExpression) r)) {
 +        return false;
@@ -1043,7 +1047,7 @@ index 0000000..2d714e2
 +  }
 +
 +  @NotNull
-+  public static Set<String> modifiersListToModifiersSet(PsiModifierList modifierList) {
++  public static Set<String> modifiersListToModifiersSet(@Nullable PsiModifierList modifierList) {
 +    HashSet<String> modifiersSet = new HashSet<String>();
 +    if (modifierList != null) {
 +      if (modifierList.hasExplicitModifier(PsiModifier.ABSTRACT)) modifiersSet.add(Modifier.ABSTRACT);
@@ -1123,10 +1127,10 @@ index 0000000..4a511b7
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/ArrayInitializerExpression.java b/j2k/src/org/jetbrains/jet/j2k/ast/ArrayInitializerExpression.java
 new file mode 100644
-index 0000000..e3071dc
+index 0000000..a7ca974
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/ArrayInitializerExpression.java
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,70 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -1154,7 +1158,8 @@ index 0000000..e3071dc
 +    return AstUtil.lowerFirstCharacter(type.convertedToNotNull().toKotlin());
 +  }
 +
-+  private static String innerTypeStr(final Type type) {
++  @NotNull
++  private static String innerTypeStr(@NotNull final Type type) {
 +    return type.convertedToNotNull().toKotlin().replace("Array", "").toLowerCase();
 +  }
 +
@@ -1167,7 +1172,7 @@ index 0000000..e3071dc
 +  }
 +
 +  @NotNull
-+  private static String explicitConvertIfNeeded(final Type type, @NotNull final Expression i) {
++  private static String explicitConvertIfNeeded(@NotNull final Type type, @NotNull final Expression i) {
 +    Set<String> doubleOrFloatTypes = new HashSet<String>(
 +      Arrays.asList("double", "float", "java.lang.double", "java.lang.float")
 +    );
@@ -1329,10 +1334,10 @@ index 0000000..5be8a82
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Block.java b/j2k/src/org/jetbrains/jet/j2k/ast/Block.java
 new file mode 100644
-index 0000000..8d18507
+index 0000000..3e22f8f
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Block.java
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,51 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -1345,6 +1350,7 @@ index 0000000..8d18507
 + * @author ignatov
 + */
 +public class Block extends Statement {
++  @NotNull
 +  public final static Block EMPTY_BLOCK = new Block();
 +
 +  private List<Statement> myStatements;
@@ -1498,10 +1504,10 @@ index 0000000..7db33c9
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Class.java b/j2k/src/org/jetbrains/jet/j2k/ast/Class.java
 new file mode 100644
-index 0000000..98c6680
+index 0000000..c00c63a
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Class.java
-@@ -0,0 +1,212 @@
+@@ -0,0 +1,221 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -1519,6 +1525,7 @@ index 0000000..98c6680
 + * @author ignatov
 + */
 +public class Class extends Member {
++  @NotNull
 +  String TYPE = "class";
 +  final Identifier myName;
 +  private final List<Expression> myBaseClassParams;
@@ -1569,6 +1576,7 @@ index 0000000..98c6680
 +    return false;
 +  }
 +
++  @NotNull
 +  String typeParameterWhereToKotlin() {
 +    if (hasWhere()) {
 +      List<String> wheres = new LinkedList<String>();
@@ -1622,6 +1630,7 @@ index 0000000..98c6680
 +    return result;
 +  }
 +
++  @NotNull
 +  String typeParametersToKotlin() {
 +    return myTypeParameters.size() > 0 ? "<" + AstUtil.joinNodes(myTypeParameters, COMMA_WITH_SPACE) + ">" : EMPTY;
 +  }
@@ -1635,6 +1644,7 @@ index 0000000..98c6680
 +      return nodesToKotlin(myExtendsTypes);
 +  }
 +
++  @NotNull
 +  String implementTypesToKotlin() {
 +    List<String> allTypes = new LinkedList<String>() {
 +      {
@@ -1645,6 +1655,7 @@ index 0000000..98c6680
 +    return allTypes.size() == 0 ? EMPTY : SPACE + COLON + SPACE + join(allTypes, COMMA_WITH_SPACE);
 +  }
 +
++  @NotNull
 +  String modifiersToKotlin() {
 +    List<String> modifierList = new LinkedList<String>();
 +
@@ -1670,6 +1681,7 @@ index 0000000..98c6680
 +    return isAbstract();
 +  }
 +
++  @NotNull
 +  String bodyToKotlin() {
 +    return SPACE + "{" + N +
 +      primaryConstructorBodyToKotlin() + N +
@@ -1678,7 +1690,8 @@ index 0000000..98c6680
 +      "}";
 +  }
 +
-+  private static List<Member> getStatic(List<? extends Member> members) {
++  @NotNull
++  private static List<Member> getStatic(@NotNull List<? extends Member> members) {
 +    List<Member> result = new LinkedList<Member>();
 +    for (Member m : members)
 +      if (m.isStatic())
@@ -1686,7 +1699,8 @@ index 0000000..98c6680
 +    return result;
 +  }
 +
-+  private static List<Member> getNonStatic(List<? extends Member> members) {
++  @NotNull
++  private static List<Member> getNonStatic(@NotNull List<? extends Member> members) {
 +    List<Member> result = new LinkedList<Member>();
 +    for (Member m : members)
 +      if (!m.isStatic())
@@ -1694,6 +1708,7 @@ index 0000000..98c6680
 +    return result;
 +  }
 +
++  @NotNull
 +  private String classObjectToKotlin() {
 +    final List<Member> staticMembers = new LinkedList<Member>(secondaryConstructorsAsStaticInitFunction());
 +    staticMembers.addAll(getStatic(membersExceptConstructors()));
@@ -1782,10 +1797,10 @@ index 0000000..830c3a4
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Constructor.java b/j2k/src/org/jetbrains/jet/j2k/ast/Constructor.java
 new file mode 100644
-index 0000000..9fe6b49
+index 0000000..758928b
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Constructor.java
-@@ -0,0 +1,36 @@
+@@ -0,0 +1,38 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -1804,10 +1819,12 @@ index 0000000..9fe6b49
 +    myIsPrimary = isPrimary;
 +  }
 +
++  @NotNull
 +  public String primarySignatureToKotlin() {
 +    return "(" + myParams.toKotlin() + ")";
 +  }
 +
++  @NotNull
 +  public String primaryBodyToKotlin() {
 +    return myBlock.toKotlin();
 +  }
@@ -1862,10 +1879,10 @@ index 0000000..bfed924
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/DeclarationStatement.java b/j2k/src/org/jetbrains/jet/j2k/ast/DeclarationStatement.java
 new file mode 100644
-index 0000000..756153a
+index 0000000..d9bbcb5
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/DeclarationStatement.java
-@@ -0,0 +1,39 @@
+@@ -0,0 +1,40 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -1884,7 +1901,8 @@ index 0000000..756153a
 +    myElements = elements;
 +  }
 +
-+  private static List<String> toStringList(List<Element> elements) {
++  @NotNull
++  private static List<String> toStringList(@NotNull List<Element> elements) {
 +    List<String> result = new LinkedList<String>();
 +    for (Element e : elements) {
 +      if (e instanceof LocalVariable) {
@@ -1990,10 +2008,10 @@ index 0000000..f9084fc
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Element.java b/j2k/src/org/jetbrains/jet/j2k/ast/Element.java
 new file mode 100644
-index 0000000..16683fb
+index 0000000..56bf2c4
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Element.java
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,31 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -2002,6 +2020,7 @@ index 0000000..16683fb
 + * @author ignatov
 + */
 +public abstract class Element extends Node {
++  @NotNull
 +  public static final Element EMPTY_ELEMENT = new EmptyElement();
 +
 +  public boolean isEmpty() {
@@ -2072,7 +2091,7 @@ index 0000000..7ac18cf
 \ No newline at end of file
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/EnumConstant.java b/j2k/src/org/jetbrains/jet/j2k/ast/EnumConstant.java
 new file mode 100644
-index 0000000..d83b2e5
+index 0000000..d80ffd3
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/EnumConstant.java
 @@ -0,0 +1,22 @@
@@ -2086,7 +2105,7 @@ index 0000000..d83b2e5
 + * @author ignatov
 + */
 +public class EnumConstant extends Field {
-+  public EnumConstant(Identifier identifier, Set<String> modifiers, Type type, Element params) {
++  public EnumConstant(Identifier identifier, Set<String> modifiers, @NotNull Type type, Element params) {
 +    super(identifier, modifiers, type.convertedToNotNull(), params);
 +  }
 +
@@ -2100,10 +2119,10 @@ index 0000000..d83b2e5
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Expression.java b/j2k/src/org/jetbrains/jet/j2k/ast/Expression.java
 new file mode 100644
-index 0000000..7b2528b
+index 0000000..d3a9843
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Expression.java
-@@ -0,0 +1,30 @@
+@@ -0,0 +1,31 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -2112,6 +2131,7 @@ index 0000000..7b2528b
 + * @author ignatov
 + */
 +public abstract class Expression extends Statement {
++  @NotNull
 +  public static final Expression EMPTY_EXPRESSION = new EmptyExpression();
 +
 +  /**
@@ -2198,10 +2218,10 @@ index 0000000..1c67340
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Field.java b/j2k/src/org/jetbrains/jet/j2k/ast/Field.java
 new file mode 100644
-index 0000000..94fa159
+index 0000000..8c2bbde
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Field.java
-@@ -0,0 +1,75 @@
+@@ -0,0 +1,76 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -2240,6 +2260,7 @@ index 0000000..94fa159
 +    return myType;
 +  }
 +
++  @NotNull
 +  String modifiersToKotlin() {
 +    List<String> modifierList = new LinkedList<String>();
 +
@@ -2384,10 +2405,10 @@ index 0000000..b6aa9e6
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Function.java b/j2k/src/org/jetbrains/jet/j2k/ast/Function.java
 new file mode 100644
-index 0000000..36545c0
+index 0000000..91c1b91
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Function.java
-@@ -0,0 +1,100 @@
+@@ -0,0 +1,101 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -2434,6 +2455,7 @@ index 0000000..36545c0
 +    return myBlock;
 +  }
 +
++  @NotNull
 +  private String typeParametersToKotlin() {
 +    return myTypeParameters.size() > 0 ? "<" + AstUtil.joinNodes(myTypeParameters, COMMA_WITH_SPACE) + ">" : EMPTY;
 +  }
@@ -2530,26 +2552,29 @@ index 0000000..d40f7b5
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Identifier.java b/j2k/src/org/jetbrains/jet/j2k/ast/Identifier.java
 new file mode 100644
-index 0000000..85b5ae1
+index 0000000..e1b095f
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Identifier.java
-@@ -0,0 +1,10 @@
+@@ -0,0 +1,13 @@
 +package org.jetbrains.jet.j2k.ast;
++
++import org.jetbrains.annotations.NotNull;
 +
 +/**
 + * @author ignatov
 + */
 +public interface Identifier extends INode {
++  @NotNull
 +  public static Identifier EMPTY_IDENTIFIER = new IdentifierImpl("");
 +
 +  public boolean isEmpty();
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/IdentifierImpl.java b/j2k/src/org/jetbrains/jet/j2k/ast/IdentifierImpl.java
 new file mode 100644
-index 0000000..98e9452
+index 0000000..8d01bcd
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/IdentifierImpl.java
-@@ -0,0 +1,61 @@
+@@ -0,0 +1,62 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -2588,6 +2613,7 @@ index 0000000..98e9452
 +    return myName.length() == 0;
 +  }
 +
++  @NotNull
 +  private static String quote(String str) {
 +    return BACKTICK + str + BACKTICK;
 +  }
@@ -2867,11 +2893,13 @@ index 0000000..0c56182
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Member.java b/j2k/src/org/jetbrains/jet/j2k/ast/Member.java
 new file mode 100644
-index 0000000..e0fff02
+index 0000000..ade895c
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Member.java
-@@ -0,0 +1,27 @@
+@@ -0,0 +1,30 @@
 +package org.jetbrains.jet.j2k.ast;
++
++import org.jetbrains.annotations.NotNull;
 +
 +import java.util.Set;
 +
@@ -2881,6 +2909,7 @@ index 0000000..e0fff02
 +public abstract class Member extends Node implements IMember {
 +  Set<String> myModifiers;
 +
++  @NotNull
 +  String accessModifier() {
 +    for (String m : myModifiers)
 +      if (m.equals(Modifier.PUBLIC) || m.equals(Modifier.PROTECTED) || m.equals(Modifier.PRIVATE))
@@ -2948,33 +2977,45 @@ index 0000000..5bfc87b
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Modifier.java b/j2k/src/org/jetbrains/jet/j2k/ast/Modifier.java
 new file mode 100644
-index 0000000..9292094
+index 0000000..8329fcb
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Modifier.java
-@@ -0,0 +1,17 @@
+@@ -0,0 +1,29 @@
 +package org.jetbrains.jet.j2k.ast;
++
++import org.jetbrains.annotations.NotNull;
 +
 +/**
 + * @author ignatov
 + */
 +public abstract class Modifier {
++  @NotNull
 +  public static final String PUBLIC = "public";
++  @NotNull
 +  public static final String PROTECTED = "protected";
++  @NotNull
 +  public static final String PRIVATE = "private";
++  @NotNull
 +  public static final String INTERNAL = "internal";
++  @NotNull
 +  public static final String STATIC = "static";
++  @NotNull
 +  public static final String ABSTRACT = "abstract";
++  @NotNull
 +  public static final String FINAL = "final";
++  @NotNull
 +  public static final String OPEN = "open";
++  @NotNull
 +  public static final String NOT_OPEN = "not open";
++  @NotNull
 +  public static final String OVERRIDE = "override";
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/NewClassExpression.java b/j2k/src/org/jetbrains/jet/j2k/ast/NewClassExpression.java
 new file mode 100644
-index 0000000..87a5a51
+index 0000000..24389f2
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/NewClassExpression.java
-@@ -0,0 +1,45 @@
+@@ -0,0 +1,46 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -2991,6 +3032,7 @@ index 0000000..87a5a51
 +  private final List<Expression> myArguments;
 +  private Expression myQualifier;
 +  private List<String> myConversions;
++  @Nullable
 +  private AnonymousClass myAnonymousClass = null;
 +
 +  public NewClassExpression(Element name, List<Expression> arguments) {
@@ -3023,10 +3065,10 @@ index 0000000..87a5a51
 \ No newline at end of file
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Node.java b/j2k/src/org/jetbrains/jet/j2k/ast/Node.java
 new file mode 100644
-index 0000000..80a6b85
+index 0000000..3d3b934
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Node.java
-@@ -0,0 +1,43 @@
+@@ -0,0 +1,60 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -3045,29 +3087,46 @@ index 0000000..80a6b85
 +    return Kind.UNDEFINED;
 +  }
 +
++  @NotNull
 +  final static Set<String> ONLY_KOTLIN_KEYWORDS = new HashSet<String>(Arrays.asList(
 +    "namespace", "as", "type", "val", "var", "fun", "is", "in", "object", "when", "trait", "This"
 +  ));
 +
++  @NotNull
 +  public final static Set<String> PRIMITIVE_TYPES = new HashSet<String>(Arrays.asList(
 +    "double", "float", "long", "int", "short", "byte", "boolean", "char"
 +  ));
 +
 +  static final String N = System.getProperty("line.separator");
++  @NotNull
 +  static final String N2 = N + N;
++  @NotNull
 +  static final String SPACE = " ";
++  @NotNull
 +  static final String EQUAL = "=";
++  @NotNull
 +  static final String EMPTY = "";
++  @NotNull
 +  static final String DOT = ".";
++  @NotNull
 +  static final String QUESTDOT = "?.";
++  @NotNull
 +  static final String COLON = ":";
++  @NotNull
 +  static final String IN = "in";
++  @NotNull
 +  static final String AT = "@";
++  @NotNull
 +  static final String DOLLAR = "$";
++  @NotNull
 +  static final String BACKTICK = "`";
++  @NotNull
 +  static final String QUEST = "?";
++  @NotNull
 +  static final String COMMA_WITH_SPACE = "," + SPACE;
++  @NotNull
 +  static final String STAR = "*";
++  @NotNull
 +  public static final String ZERO = "0";
 +}
 \ No newline at end of file
@@ -3312,10 +3371,10 @@ index 0000000..9a84b46
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/ReferenceElement.java b/j2k/src/org/jetbrains/jet/j2k/ast/ReferenceElement.java
 new file mode 100644
-index 0000000..c557edf
+index 0000000..4be89b2
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/ReferenceElement.java
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,28 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -3327,7 +3386,9 @@ index 0000000..c557edf
 + * @author ignatov
 + */
 +public class ReferenceElement extends Element {
++  @NotNull
 +  private final Identifier myReference;
++  @NotNull
 +  private final List<Type> myTypes;
 +
 +  public ReferenceElement(@NotNull Identifier reference, @NotNull List<Type> types) {
@@ -3397,10 +3458,10 @@ index 0000000..c409b98
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Statement.java b/j2k/src/org/jetbrains/jet/j2k/ast/Statement.java
 new file mode 100644
-index 0000000..1be7eaf
+index 0000000..b96d026
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Statement.java
-@@ -0,0 +1,21 @@
+@@ -0,0 +1,22 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -3409,6 +3470,7 @@ index 0000000..1be7eaf
 + * @author ignatov
 + */
 +public abstract class Statement extends Element {
++  @NotNull
 +  public static final Statement EMPTY_STATEMENT = new EmptyStatement();
 +
 +  /**
@@ -3602,10 +3664,10 @@ index 0000000..d9ae141
 \ No newline at end of file
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Type.java b/j2k/src/org/jetbrains/jet/j2k/ast/Type.java
 new file mode 100644
-index 0000000..901a7b5
+index 0000000..d0182cb
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Type.java
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,48 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -3614,6 +3676,7 @@ index 0000000..901a7b5
 + * @author ignatov
 + */
 +public abstract class Type extends Element {
++  @NotNull
 +  public static final Type EMPTY_TYPE = new EmptyType();
 +  boolean myNullable = true;
 +
@@ -3623,6 +3686,7 @@ index 0000000..901a7b5
 +    return Kind.TYPE;
 +  }
 +
++  @NotNull
 +  public Type convertedToNotNull() {
 +    myNullable = false;
 +    return this;
@@ -3813,13 +3877,14 @@ index 0000000..8502370
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/util/AstUtil.java b/j2k/src/org/jetbrains/jet/j2k/util/AstUtil.java
 new file mode 100644
-index 0000000..047c96c
+index 0000000..21c991a
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/util/AstUtil.java
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,90 @@
 +package org.jetbrains.jet.j2k.util;
 +
 +import org.jetbrains.annotations.NotNull;
++import org.jetbrains.annotations.Nullable;
 +import org.jetbrains.jet.j2k.ast.Expression;
 +import org.jetbrains.jet.j2k.ast.INode;
 +
@@ -3834,7 +3899,7 @@ index 0000000..047c96c
 +  private AstUtil() {
 +  }
 +
-+  private static String join(final String[] array, final String delimiter) {
++  private static String join(@NotNull final String[] array, @Nullable final String delimiter) {
 +    StringBuilder buffer = new StringBuilder();
 +    boolean haveDelimiter = (delimiter != null);
 +
@@ -3848,30 +3913,34 @@ index 0000000..047c96c
 +    return buffer.toString();
 +  }
 +
-+  public static String joinNodes(final List<? extends INode> nodes, final String delimiter) {
++  public static String joinNodes(@NotNull final List<? extends INode> nodes, final String delimiter) {
 +    return join(nodesToKotlin(nodes), delimiter);
 +  }
 +
-+  public static String join(final List<String> array, final String delimiter) {
++  public static String join(@NotNull final List<String> array, final String delimiter) {
 +    return join(array.toArray(new String[array.size()]), delimiter);
 +  }
 +
-+  public static List<String> nodesToKotlin(List<? extends INode> nodes) {
++  @NotNull
++  public static List<String> nodesToKotlin(@NotNull List<? extends INode> nodes) {
 +    List<String> result = new LinkedList<String>();
 +    for (INode n : nodes)
 +      result.add(n.toKotlin());
 +    return result;
 +  }
 +
-+  public static String upperFirstCharacter(String string) {
++  @NotNull
++  public static String upperFirstCharacter(@NotNull String string) {
 +    return string.substring(0, 1).toUpperCase() + string.substring(1);
 +  }
 +
-+  public static String lowerFirstCharacter(String string) {
++  @NotNull
++  public static String lowerFirstCharacter(@NotNull String string) {
 +    return string.substring(0, 1).toLowerCase() + string.substring(1);
 +  }
 +
-+  public static List<String> createListWithEmptyString(final List<Expression> arguments) {
++  @NotNull
++  public static List<String> createListWithEmptyString(@NotNull final List<Expression> arguments) {
 +    final List<String> conversions = new LinkedList<String>();
 +    //noinspection UnusedDeclaration
 +    for (Expression argument : arguments) conversions.add("");
@@ -3896,7 +3965,7 @@ index 0000000..047c96c
 +      return "(" + f + ")" + s;
 +  }
 +
-+  public static <T> T getOrElse(Map<T, T> map, T e, T orElse) {
++  public static <T> T getOrElse(@NotNull Map<T, T> map, T e, T orElse) {
 +    if (map.containsKey(e))
 +      return map.get(e);
 +    return orElse;
@@ -3904,14 +3973,15 @@ index 0000000..047c96c
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/ElementVisitor.java b/j2k/src/org/jetbrains/jet/j2k/visitors/ElementVisitor.java
 new file mode 100644
-index 0000000..f18a5f0
+index 0000000..4a39cf5
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/visitors/ElementVisitor.java
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,93 @@
 +package org.jetbrains.jet.j2k.visitors;
 +
 +import com.intellij.psi.*;
 +import org.jetbrains.annotations.NotNull;
++import org.jetbrains.annotations.Nullable;
 +import org.jetbrains.jet.j2k.Converter;
 +import org.jetbrains.jet.j2k.ast.*;
 +
@@ -3923,6 +3993,7 @@ index 0000000..f18a5f0
 + * @author ignatov
 + */
 +public class ElementVisitor extends JavaElementVisitor {
++  @Nullable
 +  private Element myResult = Element.EMPTY_ELEMENT;
 +
 +  @NotNull
@@ -3931,7 +4002,7 @@ index 0000000..f18a5f0
 +  }
 +
 +  @Override
-+  public void visitLocalVariable(PsiLocalVariable variable) {
++  public void visitLocalVariable(@NotNull PsiLocalVariable variable) {
 +    super.visitLocalVariable(variable);
 +
 +    myResult = new LocalVariable(
@@ -3943,7 +4014,7 @@ index 0000000..f18a5f0
 +  }
 +
 +  @Override
-+  public void visitExpressionList(PsiExpressionList list) {
++  public void visitExpressionList(@NotNull PsiExpressionList list) {
 +    super.visitExpressionList(list);
 +    myResult = new ExpressionList(
 +      expressionsToExpressionList(list.getExpressions()),
@@ -3952,7 +4023,7 @@ index 0000000..f18a5f0
 +  }
 +
 +  @Override
-+  public void visitReferenceElement(PsiJavaCodeReferenceElement reference) {
++  public void visitReferenceElement(@NotNull PsiJavaCodeReferenceElement reference) {
 +    super.visitReferenceElement(reference);
 +
 +    final List<Type> types = typesToTypeList(reference.getTypeParameters());
@@ -3977,13 +4048,13 @@ index 0000000..f18a5f0
 +  }
 +
 +  @Override
-+  public void visitTypeElement(PsiTypeElement type) {
++  public void visitTypeElement(@NotNull PsiTypeElement type) {
 +    super.visitTypeElement(type);
 +    myResult = new TypeElement(typeToType(type.getType()));
 +  }
 +
 +  @Override
-+  public void visitTypeParameter(PsiTypeParameter classParameter) {
++  public void visitTypeParameter(@NotNull PsiTypeParameter classParameter) {
 +    super.visitTypeParameter(classParameter);
 +    myResult = new TypeParameter(
 +      new IdentifierImpl(classParameter.getName()), // TODO
@@ -3992,7 +4063,7 @@ index 0000000..f18a5f0
 +  }
 +
 +  @Override
-+  public void visitParameterList(PsiParameterList list) {
++  public void visitParameterList(@NotNull PsiParameterList list) {
 +    super.visitParameterList(list);
 +    myResult = new ParameterList(
 +      parametersToParameterList(list.getParameters())
@@ -4002,10 +4073,10 @@ index 0000000..f18a5f0
 \ No newline at end of file
 diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/ExpressionVisitor.java b/j2k/src/org/jetbrains/jet/j2k/visitors/ExpressionVisitor.java
 new file mode 100644
-index 0000000..deffc51
+index 0000000..3cd110a
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/visitors/ExpressionVisitor.java
-@@ -0,0 +1,535 @@
+@@ -0,0 +1,536 @@
 +package org.jetbrains.jet.j2k.visitors;
 +
 +import com.intellij.psi.*;
@@ -4024,6 +4095,7 @@ index 0000000..deffc51
 + * @author ignatov
 + */
 +public class ExpressionVisitor extends StatementVisitor {
++  @Nullable
 +  Expression myResult = Expression.EMPTY_EXPRESSION;
 +
 +  @Override
@@ -4038,7 +4110,7 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitArrayAccessExpression(PsiArrayAccessExpression expression) {
++  public void visitArrayAccessExpression(@NotNull PsiArrayAccessExpression expression) {
 +    super.visitArrayAccessExpression(expression);
 +    myResult = new ArrayAccessExpression(
 +      expressionToExpression(expression.getArrayExpression()),
@@ -4047,7 +4119,7 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitArrayInitializerExpression(PsiArrayInitializerExpression expression) {
++  public void visitArrayInitializerExpression(@NotNull PsiArrayInitializerExpression expression) {
 +    super.visitArrayInitializerExpression(expression);
 +    myResult = new ArrayInitializerExpression(
 +      typeToType(expression.getType()),
@@ -4056,7 +4128,7 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitAssignmentExpression(PsiAssignmentExpression expression) {
++  public void visitAssignmentExpression(@NotNull PsiAssignmentExpression expression) {
 +    super.visitAssignmentExpression(expression);
 +
 +    // TODO: simplify
@@ -4119,7 +4191,7 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitBinaryExpression(PsiBinaryExpression expression) {
++  public void visitBinaryExpression(@NotNull PsiBinaryExpression expression) {
 +    super.visitBinaryExpression(expression);
 +
 +    if (expression.getOperationSign().getTokenType() == JavaTokenType.GTGTGT)
@@ -4137,13 +4209,13 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitClassObjectAccessExpression(PsiClassObjectAccessExpression expression) {
++  public void visitClassObjectAccessExpression(@NotNull PsiClassObjectAccessExpression expression) {
 +    super.visitClassObjectAccessExpression(expression);
 +    myResult = new ClassObjectAccessExpression(elementToElement(expression.getOperand()));
 +  }
 +
 +  @Override
-+  public void visitConditionalExpression(PsiConditionalExpression expression) {
++  public void visitConditionalExpression(@NotNull PsiConditionalExpression expression) {
 +    super.visitConditionalExpression(expression);
 +    myResult = new ParenthesizedExpression(
 +      new IfStatement(
@@ -4155,13 +4227,13 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitExpressionList(PsiExpressionList list) {
++  public void visitExpressionList(@NotNull PsiExpressionList list) {
 +    super.visitExpressionList(list);
 +    myResult = new ExpressionList(expressionsToExpressionList(list.getExpressions()));
 +  }
 +
 +  @Override
-+  public void visitInstanceOfExpression(PsiInstanceOfExpression expression) {
++  public void visitInstanceOfExpression(@NotNull PsiInstanceOfExpression expression) {
 +    super.visitInstanceOfExpression(expression);
 +    myResult = new IsOperator(
 +      expressionToExpression(expression.getOperand()),
@@ -4169,7 +4241,7 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitLiteralExpression(PsiLiteralExpression expression) {
++  public void visitLiteralExpression(@NotNull PsiLiteralExpression expression) {
 +    super.visitLiteralExpression(expression);
 +
 +    final Object value = expression.getValue();
@@ -4294,7 +4366,7 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitNewExpression(PsiNewExpression expression) {
++  public void visitNewExpression(@NotNull PsiNewExpression expression) {
 +    super.visitNewExpression(expression);
 +
 +    if (expression.getArrayInitializer() != null) // new Foo[] {}
@@ -4351,7 +4423,7 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitParenthesizedExpression(PsiParenthesizedExpression expression) {
++  public void visitParenthesizedExpression(@NotNull PsiParenthesizedExpression expression) {
 +    super.visitParenthesizedExpression(expression);
 +    myResult = new ParenthesizedExpression(
 +      expressionToExpression(expression.getExpression())
@@ -4359,7 +4431,7 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitPostfixExpression(PsiPostfixExpression expression) {
++  public void visitPostfixExpression(@NotNull PsiPostfixExpression expression) {
 +    super.visitPostfixExpression(expression);
 +    myResult = new PostfixOperator(
 +      getOperatorString(expression.getOperationSign().getTokenType()),
@@ -4368,7 +4440,7 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitPrefixExpression(PsiPrefixExpression expression) {
++  public void visitPrefixExpression(@NotNull PsiPrefixExpression expression) {
 +    super.visitPrefixExpression(expression);
 +    if (expression.getOperationTokenType() == JavaTokenType.TILDE)
 +      myResult = new DummyMethodCallExpression(
@@ -4382,7 +4454,7 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitReferenceExpression(PsiReferenceExpression expression) {
++  public void visitReferenceExpression(@NotNull PsiReferenceExpression expression) {
 +    super.visitReferenceExpression(expression);
 +
 +    final boolean isFieldReference = isFieldReference(expression, getContainingClass(expression));
@@ -4456,7 +4528,7 @@ index 0000000..deffc51
 +    return false;
 +  }
 +
-+  private static boolean isInsideSecondaryConstructor(PsiReferenceExpression expression) {
++  private static boolean isInsideSecondaryConstructor(@NotNull PsiReferenceExpression expression) {
 +    PsiElement context = expression.getContext();
 +    while (context != null) {
 +      if (context instanceof PsiMethod && ((PsiMethod) context).isConstructor())
@@ -4466,7 +4538,7 @@ index 0000000..deffc51
 +    return false;
 +  }
 +
-+  private static boolean isInsidePrimaryConstructor(PsiExpression expression) {
++  private static boolean isInsidePrimaryConstructor(@NotNull PsiExpression expression) {
 +    PsiElement context = expression.getContext();
 +    while (context != null) {
 +      if (context instanceof PsiMethod && ((PsiMethod) context).isConstructor())
@@ -4487,7 +4559,7 @@ index 0000000..deffc51
 +    return null;
 +  }
 +
-+  private static boolean isThisExpression(PsiReferenceExpression expression) {
++  private static boolean isThisExpression(@NotNull PsiReferenceExpression expression) {
 +    for (PsiReference r : expression.getReferences())
 +      if (r.getCanonicalText().equals("this")) {
 +        final PsiElement res = r.resolve();
@@ -4498,7 +4570,7 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitSuperExpression(PsiSuperExpression expression) {
++  public void visitSuperExpression(@NotNull PsiSuperExpression expression) {
 +    super.visitSuperExpression(expression);
 +    final PsiJavaCodeReferenceElement qualifier = expression.getQualifier();
 +    myResult = new SuperExpression(
@@ -4509,7 +4581,7 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitThisExpression(PsiThisExpression expression) {
++  public void visitThisExpression(@NotNull PsiThisExpression expression) {
 +    super.visitThisExpression(expression);
 +    final PsiJavaCodeReferenceElement qualifier = expression.getQualifier();
 +    myResult = new ThisExpression(
@@ -4520,7 +4592,7 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitTypeCastExpression(PsiTypeCastExpression expression) {
++  public void visitTypeCastExpression(@NotNull PsiTypeCastExpression expression) {
 +    super.visitTypeCastExpression(expression);
 +
 +    final PsiTypeElement castType = expression.getCastType();
@@ -4533,7 +4605,7 @@ index 0000000..deffc51
 +  }
 +
 +  @Override
-+  public void visitPolyadicExpression(PsiPolyadicExpression expression) {
++  public void visitPolyadicExpression(@NotNull PsiPolyadicExpression expression) {
 +    super.visitPolyadicExpression(expression);
 +    myResult = new PolyadicExpression(
 +      expressionsToExpressionList(expression.getOperands()),
@@ -4544,10 +4616,10 @@ index 0000000..deffc51
 \ No newline at end of file
 diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/StatementVisitor.java b/j2k/src/org/jetbrains/jet/j2k/visitors/StatementVisitor.java
 new file mode 100644
-index 0000000..d971851
+index 0000000..07b4689
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/visitors/StatementVisitor.java
-@@ -0,0 +1,350 @@
+@@ -0,0 +1,351 @@
 +package org.jetbrains.jet.j2k.visitors;
 +
 +import com.intellij.psi.*;
@@ -4581,7 +4653,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitAssertStatement(PsiAssertStatement statement) {
++  public void visitAssertStatement(@NotNull PsiAssertStatement statement) {
 +    super.visitAssertStatement(statement);
 +    myResult = new AssertStatement(
 +      expressionToExpression(statement.getAssertCondition()),
@@ -4590,7 +4662,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitBlockStatement(PsiBlockStatement statement) {
++  public void visitBlockStatement(@NotNull PsiBlockStatement statement) {
 +    super.visitBlockStatement(statement);
 +    myResult = new Block(
 +      statementsToStatementList(statement.getCodeBlock().getStatements()),
@@ -4599,7 +4671,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitBreakStatement(PsiBreakStatement statement) {
++  public void visitBreakStatement(@NotNull PsiBreakStatement statement) {
 +    super.visitBreakStatement(statement);
 +    if (statement.getLabelIdentifier() == null)
 +      myResult = new BreakStatement();
@@ -4610,7 +4682,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitContinueStatement(PsiContinueStatement statement) {
++  public void visitContinueStatement(@NotNull PsiContinueStatement statement) {
 +    super.visitContinueStatement(statement);
 +    if (statement.getLabelIdentifier() == null)
 +      myResult = new ContinueStatement();
@@ -4621,7 +4693,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitDeclarationStatement(PsiDeclarationStatement statement) {
++  public void visitDeclarationStatement(@NotNull PsiDeclarationStatement statement) {
 +    super.visitDeclarationStatement(statement);
 +    myResult = new DeclarationStatement(
 +      elementsToElementList(statement.getDeclaredElements())
@@ -4629,7 +4701,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitDoWhileStatement(PsiDoWhileStatement statement) {
++  public void visitDoWhileStatement(@NotNull PsiDoWhileStatement statement) {
 +    super.visitDoWhileStatement(statement);
 +    myResult = new DoWhileStatement(
 +      expressionToExpression(statement.getCondition()),
@@ -4638,13 +4710,13 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitExpressionStatement(PsiExpressionStatement statement) {
++  public void visitExpressionStatement(@NotNull PsiExpressionStatement statement) {
 +    super.visitExpressionStatement(statement);
 +    myResult = expressionToExpression(statement.getExpression());
 +  }
 +
 +  @Override
-+  public void visitExpressionListStatement(PsiExpressionListStatement statement) {
++  public void visitExpressionListStatement(@NotNull PsiExpressionListStatement statement) {
 +    super.visitExpressionListStatement(statement);
 +    myResult =
 +      new ExpressionListStatement(expressionsToExpressionList(statement.getExpressionList().getExpressions()));
@@ -4701,7 +4773,7 @@ index 0000000..d971851
 +    }
 +  }
 +
-+  private static boolean isOnceWritableIterator(PsiLocalVariable firstChild) {
++  private static boolean isOnceWritableIterator(@Nullable PsiLocalVariable firstChild) {
 +    int counter = 0;
 +    if (firstChild != null)
 +      for (PsiReference r : (ReferencesSearch.search(firstChild))) {
@@ -4714,7 +4786,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitForeachStatement(PsiForeachStatement statement) {
++  public void visitForeachStatement(@NotNull PsiForeachStatement statement) {
 +    super.visitForeachStatement(statement);
 +    myResult = new ForeachStatement(
 +      parameterToParameter(statement.getIterationParameter()),
@@ -4724,7 +4796,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitIfStatement(PsiIfStatement statement) {
++  public void visitIfStatement(@NotNull PsiIfStatement statement) {
 +    super.visitIfStatement(statement);
 +    myResult = new IfStatement(
 +      expressionToExpression(statement.getCondition()),
@@ -4734,7 +4806,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitLabeledStatement(PsiLabeledStatement statement) {
++  public void visitLabeledStatement(@NotNull PsiLabeledStatement statement) {
 +    super.visitLabeledStatement(statement);
 +    myResult = new LabelStatement(
 +      identifierToIdentifier(statement.getLabelIdentifier()),
@@ -4743,7 +4815,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitSwitchLabelStatement(PsiSwitchLabelStatement statement) {
++  public void visitSwitchLabelStatement(@NotNull PsiSwitchLabelStatement statement) {
 +    super.visitSwitchLabelStatement(statement);
 +    myResult = statement.isDefaultCase() ?
 +      new DefaultSwitchLabelStatement() :
@@ -4751,7 +4823,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitSwitchStatement(PsiSwitchStatement statement) {
++  public void visitSwitchStatement(@NotNull PsiSwitchStatement statement) {
 +    super.visitSwitchStatement(statement);
 +    myResult = new SwitchContainer(
 +      expressionToExpression(statement.getExpression()),
@@ -4803,6 +4875,7 @@ index 0000000..d971851
 +    return false;
 +  }
 +
++  @NotNull
 +  private static List<PsiStatement> getAllToNextBreak(@NotNull final List<PsiStatement> allStatements, final int start) {
 +    List<PsiStatement> result = new LinkedList<PsiStatement>();
 +    for (int i = start; i < allStatements.size(); i++) {
@@ -4838,7 +4911,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitSynchronizedStatement(PsiSynchronizedStatement statement) {
++  public void visitSynchronizedStatement(@NotNull PsiSynchronizedStatement statement) {
 +    super.visitSynchronizedStatement(statement);
 +    myResult = new SynchronizedStatement(
 +      expressionToExpression(statement.getLockExpression()),
@@ -4847,7 +4920,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitThrowStatement(PsiThrowStatement statement) {
++  public void visitThrowStatement(@NotNull PsiThrowStatement statement) {
 +    super.visitThrowStatement(statement);
 +    myResult = new ThrowStatement(
 +      expressionToExpression(statement.getException())
@@ -4855,7 +4928,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitTryStatement(PsiTryStatement statement) {
++  public void visitTryStatement(@NotNull PsiTryStatement statement) {
 +    super.visitTryStatement(statement);
 +
 +    List<CatchStatement> catches = new LinkedList<CatchStatement>();
@@ -4874,7 +4947,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitWhileStatement(PsiWhileStatement statement) {
++  public void visitWhileStatement(@NotNull PsiWhileStatement statement) {
 +    super.visitWhileStatement(statement);
 +    myResult = new WhileStatement(
 +      expressionToExpression(statement.getCondition()),
@@ -4883,7 +4956,7 @@ index 0000000..d971851
 +  }
 +
 +  @Override
-+  public void visitReturnStatement(PsiReturnStatement statement) {
++  public void visitReturnStatement(@NotNull PsiReturnStatement statement) {
 +    super.visitReturnStatement(statement);
 +    PsiExpression returnValue = statement.getReturnValue();
 +    String conversion = "";
@@ -4900,13 +4973,14 @@ index 0000000..d971851
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/SuperVisitor.java b/j2k/src/org/jetbrains/jet/j2k/visitors/SuperVisitor.java
 new file mode 100644
-index 0000000..16fcf40
+index 0000000..c7a8e7b
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/visitors/SuperVisitor.java
-@@ -0,0 +1,38 @@
+@@ -0,0 +1,41 @@
 +package org.jetbrains.jet.j2k.visitors;
 +
 +import com.intellij.psi.*;
++import org.jetbrains.annotations.NotNull;
 +
 +import java.util.HashSet;
 +
@@ -4915,24 +4989,26 @@ index 0000000..16fcf40
 + * @author ignatov
 + */
 +public class SuperVisitor extends JavaRecursiveElementVisitor {
++  @NotNull
 +  private final HashSet<PsiExpressionList> myResolvedSuperCallParameters;
 +
 +  public SuperVisitor() {
 +    myResolvedSuperCallParameters = new HashSet<PsiExpressionList>();
 +  }
 +
++  @NotNull
 +  public HashSet<PsiExpressionList> getResolvedSuperCallParameters() {
 +    return myResolvedSuperCallParameters;
 +  }
 +
 +  @Override
-+  public void visitMethodCallExpression(PsiMethodCallExpression expression) {
++  public void visitMethodCallExpression(@NotNull PsiMethodCallExpression expression) {
 +    super.visitMethodCallExpression(expression);
 +    if (isSuper(expression.getMethodExpression()))
 +      myResolvedSuperCallParameters.add(expression.getArgumentList());
 +  }
 +
-+  static boolean isSuper(PsiReference r) {
++  static boolean isSuper(@NotNull PsiReference r) {
 +    if (r.getCanonicalText().equals("super")) {
 +      final PsiElement baseConstructor = r.resolve();
 +      if (baseConstructor != null && baseConstructor instanceof PsiMethod && ((PsiMethod) baseConstructor).isConstructor()) {
@@ -4944,13 +5020,14 @@ index 0000000..16fcf40
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/ThisVisitor.java b/j2k/src/org/jetbrains/jet/j2k/visitors/ThisVisitor.java
 new file mode 100644
-index 0000000..98fff4e
+index 0000000..c077ced
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/visitors/ThisVisitor.java
-@@ -0,0 +1,35 @@
+@@ -0,0 +1,37 @@
 +package org.jetbrains.jet.j2k.visitors;
 +
 +import com.intellij.psi.*;
++import org.jetbrains.annotations.NotNull;
 +import org.jetbrains.annotations.Nullable;
 +
 +import java.util.HashSet;
@@ -4959,10 +5036,11 @@ index 0000000..98fff4e
 + * @author ignatov
 + */
 +public class ThisVisitor extends JavaRecursiveElementVisitor {
++  @NotNull
 +  private final HashSet<PsiMethod> myResolvedConstructors = new HashSet<PsiMethod>();
 +
 +  @Override
-+  public void visitReferenceExpression(PsiReferenceExpression expression) {
++  public void visitReferenceExpression(@NotNull PsiReferenceExpression expression) {
 +    for (PsiReference r : expression.getReferences())
 +      if (r.getCanonicalText().equals("this")) {
 +        final PsiElement res = r.resolve();
@@ -4985,7 +5063,7 @@ index 0000000..98fff4e
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/TypeVisitor.java b/j2k/src/org/jetbrains/jet/j2k/visitors/TypeVisitor.java
 new file mode 100644
-index 0000000..7be5bc4
+index 0000000..a24aa10
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/visitors/TypeVisitor.java
 @@ -0,0 +1,157 @@
@@ -5016,7 +5094,7 @@ index 0000000..7be5bc4
 +  }
 +
 +  @Override
-+  public Type visitPrimitiveType(PsiPrimitiveType primitiveType) {
++  public Type visitPrimitiveType(@NotNull PsiPrimitiveType primitiveType) {
 +    final String name = primitiveType.getCanonicalText();
 +    final IdentifierImpl identifier = new IdentifierImpl(name);
 +
@@ -5030,14 +5108,14 @@ index 0000000..7be5bc4
 +  }
 +
 +  @Override
-+  public Type visitArrayType(PsiArrayType arrayType) {
++  public Type visitArrayType(@NotNull PsiArrayType arrayType) {
 +    if (myResult == Type.EMPTY_TYPE)
 +      myResult = new ArrayType(typeToType(arrayType.getComponentType()));
 +    return super.visitArrayType(arrayType);
 +  }
 +
 +  @Override
-+  public Type visitClassType(PsiClassType classType) {
++  public Type visitClassType(@NotNull PsiClassType classType) {
 +    final IdentifierImpl identifier = constructClassTypeIdentifier(classType);
 +    final List<Type> resolvedClassTypeParams = createRawTypesForResolvedReference(classType);
 +
@@ -5119,7 +5197,7 @@ index 0000000..7be5bc4
 +  }
 +
 +  @Override
-+  public Type visitWildcardType(PsiWildcardType wildcardType) {
++  public Type visitWildcardType(@NotNull PsiWildcardType wildcardType) {
 +    if (wildcardType.isExtends())
 +      myResult = new OutProjectionType(typeToType(wildcardType.getExtendsBound()));
 +    else if (wildcardType.isSuper())
@@ -5130,7 +5208,7 @@ index 0000000..7be5bc4
 +  }
 +
 +  @Override
-+  public Type visitEllipsisType(PsiEllipsisType ellipsisType) {
++  public Type visitEllipsisType(@NotNull PsiEllipsisType ellipsisType) {
 +    myResult = new VarArg(typeToType(ellipsisType.getComponentType()));
 +    return super.visitEllipsisType(ellipsisType);
 +  }
