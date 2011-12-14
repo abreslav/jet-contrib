@@ -5,6 +5,7 @@ import org.junit.Test;
 /**
  * @author Talanov Pavel
  */
+//TODO: move most of the cases to other suites
 public final class SystemTest extends JavaClassesTest {
 
     final private static String MAIN = "system/";
@@ -50,5 +51,30 @@ public final class SystemTest extends JavaClassesTest {
         checkOutput("nullChecks.kt", "6", "2", "3");
     }
 
+    @Test
+    public void ranges() throws Exception {
+        checkOutput("ranges.kt", "OK\n" +
+                " 1 2 3 4 5\n" +
+                "Out: array has only 3 elements. x = 4\n" +
+                "Yes: array contains aaa\n" +
+                "No: array doesn't contains ddd\n", "4");
+
+        checkOutput("ranges.kt", " 1 2 3 4 5\n" +
+                "Out: array has only 3 elements. x = 10\n" +
+                "Yes: array contains aaa\n" +
+                "No: array doesn't contains ddd\n", "10");
+    }
+
+    @Test
+    public void forLoop() throws Exception {
+        checkOutput("forLoop.kt", "a\n" +
+                "b\n" +
+                "c\n" +
+                "\n" +
+                "a\n" +
+                "b\n" +
+                "c\n", "a", "b", "c");
+        checkOutput("forLoop.kt", "123\n\n123\n", "123");
+    }
 
 }

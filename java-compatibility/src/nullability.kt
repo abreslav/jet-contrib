@@ -501,6 +501,21 @@ fun Byte?.dec() : Byte = this.sure().dec()
 fun Byte?.plus() : Byte = this.sure().plus()
 fun Byte?.minus() : Byte = this.sure().minus()
 
+// Boolean
+fun Boolean?.not() = this.sure().not()
+fun Boolean?.xor(other : Boolean?) = this.sure().xor(other.sure())
+
 // Byte  
 fun Byte.or(other : Int?) : Byte { return this.int.or(other).byt }
 fun Byte.or(other : Byte?) : Byte { return this.or(other).byt }
+
+// Long
+fun Long.or(other : Byte)  = this.or(other.lng)
+fun Long.or(other : Short) = this.or(other.lng)
+fun Long.or(other : Int)   = this.or(other.lng)
+fun Long.or(other : Char)  = this.or(other.lng)
+
+fun Long.and(other : Byte)  = this.and(other.lng)
+fun Long.and(other : Short) = this.and(other.lng)
+fun Long.and(other : Int)   = this.and(other.lng)
+fun Long.and(other : Char)  = this.and(other.lng)
