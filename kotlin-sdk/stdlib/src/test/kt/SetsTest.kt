@@ -5,8 +5,8 @@ import std.util.*
 import std.testing.*
 import java.util.*
 
-class CollectionsTest() : TestSupport() {
-  val data = arrayList("foo", "bar")
+class SetsTest() : TestSupport() {
+  val data = hashSet("foo", "bar")
 
   fun testAny() {
     assert {
@@ -34,6 +34,11 @@ class CollectionsTest() : TestSupport() {
     }
     assertEquals(1, foo.size)
     assertEquals(arrayList("foo"), foo)
+
+    // TODO ideally foo would now be a set
+    assert("Filter on a Set should return a Set") {
+      foo is Set<String>
+    }
   }
 
   fun testFind() {

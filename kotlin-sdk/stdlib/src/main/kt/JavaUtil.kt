@@ -1,6 +1,7 @@
 namespace std
 
 namespace util {
+    import std.io.*
     import java.util.*
 
   /*
@@ -21,12 +22,19 @@ namespace util {
 
 
 
-    /** Returns a new list from one or more elements */
-    fun list<T>(vararg values: T) : List<T> {
+    /** Returns a new ArrayList with a variable number of initial elements */
+    fun arrayList<T>(vararg values: T) : ArrayList<T> {
       val answer = ArrayList<T>()
-      for (v in values) {
+      for (v in values)
         answer.add(v)
-      }
+      return answer;
+    }
+
+    /** Returns a new HashSet with a variable number of initial elements */
+    fun hashSet<T>(vararg values: T) : HashSet<T> {
+      val answer = HashSet<T>()
+      for (v in values)
+        answer.add(v)
       return answer;
     }
 
@@ -39,17 +47,20 @@ namespace util {
         get() = isEmpty()
 
     /** Returns a new collection for the results of a helper method */
-    // TODO using: Collection<T> for the return type - I wonder if this exact type could be
-    // deduced somewhat from the This.Type; e.g. returning Set on a Set, Array on Array etc
     protected fun <T,R> java.lang.Iterable<T>.build(defaultSize: Int? = null) : Collection<R> {
-      if (defaultSize != null)
+      if (defaultSize != null) {
         return ArrayList<R>(defaultSize)
-      else
+      } else {
         return ArrayList<R>()
+      }
     }
 
     protected fun <T,R> Set<T>.build(defaultSize: Int? = null) : Set<R> {
-      return HashSet<R>()
+      if (defaultSize != null) {
+        return HashSet<R>(defaultSize)
+      } else {
+        return HashSet<R>()
+      }
     }
 
 
@@ -84,6 +95,8 @@ namespace util {
     }
 
     /** Returns a new collection containing all elements in this collection which match the given predicate */
+    // TODO using: Collection<T> for the return type - I wonder if this exact type could be
+    // deduced somewhat from the This.Type; e.g. returning Set on a Set, Array on Array etc
     fun <T> java.lang.Iterable<T>.filter(predicate: fun(T): Boolean) : Collection<T> {
       val result = this.build<T,T>()
       for (elem in this) {
