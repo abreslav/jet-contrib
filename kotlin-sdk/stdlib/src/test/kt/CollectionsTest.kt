@@ -52,19 +52,18 @@ class CollectionsTest() : TestSupport() {
     assertEquals("foo", f)
   }
 
-  /*
-  TODO compiler bug :)
-  http://youtrack.jetbrains.net/issue/KT-849
-
   fun testMap() {
-    val lengths = data.map{s => s.length}
-    println("Lengths are ${lengths}")
+    /**
+      TODO compiler bug
+      we should be able to remove the explicit type on the function
+      http://youtrack.jetbrains.net/issue/KT-849
+    */
+    val lengths = data.map<String,Int>{s => s.length}
     assert {
       lengths.all{it == 3}
     }
-    assertEquals(3, lengths.size)
+    assertEquals(2, lengths.size)
     assertEquals(list(3, 3), lengths)
   }
-  */
 
 }
