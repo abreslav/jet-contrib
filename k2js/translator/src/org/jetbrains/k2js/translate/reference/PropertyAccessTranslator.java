@@ -14,6 +14,7 @@ import org.jetbrains.jet.lang.descriptors.PropertySetterDescriptor;
 import org.jetbrains.jet.lang.psi.JetExpression;
 import org.jetbrains.jet.lang.psi.JetQualifiedExpression;
 import org.jetbrains.jet.lang.psi.JetSimpleNameExpression;
+import org.jetbrains.jet.lang.resolve.DescriptorUtils;
 import org.jetbrains.k2js.translate.context.TranslationContext;
 import org.jetbrains.k2js.translate.general.Translation;
 
@@ -24,47 +25,67 @@ import static org.jetbrains.k2js.translate.utils.TranslationUtils.backingFieldRe
 import static org.jetbrains.k2js.translate.utils.TranslationUtils.getImplicitReceiver;
 
 /**
- * @author Talanov Pavel
+ * @author Pavel Talanov
  */
 public final class PropertyAccessTranslator extends AccessTranslator {
 
-    private static String MESSAGE = "Cannot be accessor call. Use canBeProperty*Call to ensure this method " +
+    private static final String MESSAGE = "Cannot be accessor call. Use canBeProperty*Call to ensure this method " +
             "can be called safely.";
 
 
     @NotNull
+    private static PropertyDescriptor getPropertyDescriptor(@NotNull JetSimpleNameExpression expression,
+                                                            @NotNull TranslationContext context) {
+        DeclarationDescriptor descriptor =
+                getDescriptorForReferenceExpression(context.bindingContext(), expression);
+        assert descriptor instanceof PropertyDescriptor : "Must be a property descriptor.";
+        return (PropertyDescriptor) descriptor;
+    }
+
+    @NotNull
     public static JsExpression translateAsPropertyGetterCall(@NotNull JetQualifiedExpression expression,
                                                              @NotNull TranslationContext context) {
-        return (new PropertyAccessTranslator(expression, context))
+        return (newInstance(expression, context))
                 .translateAsGet();
     }
 
     @NotNull
     public static JsExpression translateAsPropertyGetterCall(@NotNull PropertyDescriptor descriptor,
                                                              @NotNull TranslationContext context) {
-        return (new PropertyAccessTranslator(descriptor, context))
+        return (newInstance(descriptor, context))
                 .translateAsGet();
-    }
-
-
-    @NotNull
-    public static PropertyAccessTranslator newInstance(@NotNull JetQualifiedExpression expression,
-                                                       @NotNull TranslationContext context) {
-        return (new PropertyAccessTranslator(expression, context));
-    }
-
-    @NotNull
-    public static PropertyAccessTranslator newInstance(@NotNull JetSimpleNameExpression expression,
-                                                       @NotNull TranslationContext context) {
-        return (new PropertyAccessTranslator(expression, context));
     }
 
     @NotNull
     public static JsExpression translateAsPropertyGetterCall(@NotNull JetSimpleNameExpression expression,
                                                              @NotNull TranslationContext context) {
-        return (new PropertyAccessTranslator(expression, context))
+        return (newInstance(expression, context))
                 .translateAsGet();
     }
+
+    @NotNull
+    private static PropertyAccessTranslator newInstance(@NotNull PropertyDescriptor descriptor,
+                                                        @NotNull TranslationContext context) {
+        return new PropertyAccessTranslator(descriptor, null, false, context);
+    }
+
+    @NotNull
+    public static PropertyAccessTranslator newInstance(@NotNull JetQualifiedExpression expression,
+                                                       @NotNull TranslationContext context) {
+        JetExpression qualifier = expression.getReceiverExpression();
+        JetSimpleNameExpression selector = getNotNullSelector(expression);
+        PropertyDescriptor propertyDescriptor = getPropertyDescriptor(selector, context);
+        boolean isBackingFieldAccess = isBackingFieldReference(selector);
+        return new PropertyAccessTranslator(propertyDescriptor, qualifier, isBackingFieldAccess, context);
+    }
+
+    @NotNull
+    public static PropertyAccessTranslator newInstance(@NotNull JetSimpleNameExpression expression,
+                                                       @NotNull TranslationContext context) {
+        PropertyDescriptor propertyDescriptor = getPropertyDescriptor(expression, context);
+        return new PropertyAccessTranslator(propertyDescriptor, null, isBackingFieldReference(expression), context);
+    }
+
 
     @NotNull
     public static PropertyAccessTranslator newInstance(@NotNull JetExpression expression,
@@ -115,30 +136,14 @@ public final class PropertyAccessTranslator extends AccessTranslator {
     private final PropertyDescriptor propertyDescriptor;
     private final boolean isBackingFieldAccess;
 
-    //TODO: make one constructor
-    private PropertyAccessTranslator(@NotNull JetSimpleNameExpression simpleName,
-                                     @NotNull TranslationContext context) {
-        super(context);
-        this.qualifier = null;
-        this.propertyDescriptor = getPropertyDescriptor(simpleName).getOriginal();
-        this.isBackingFieldAccess = isBackingFieldReference(simpleName);
-    }
-
-    private PropertyAccessTranslator(@NotNull JetQualifiedExpression qualifiedExpression,
-                                     @NotNull TranslationContext context) {
-        super(context);
-        this.qualifier = qualifiedExpression.getReceiverExpression();
-        JetSimpleNameExpression selector = getNotNullSelector(qualifiedExpression);
-        this.propertyDescriptor = getPropertyDescriptor(selector).getOriginal();
-        this.isBackingFieldAccess = isBackingFieldReference(selector);
-    }
-
     private PropertyAccessTranslator(@NotNull PropertyDescriptor descriptor,
+                                     @Nullable JetExpression qualifier,
+                                     boolean isBackingFieldAccess,
                                      @NotNull TranslationContext context) {
         super(context);
-        this.qualifier = null;
+        this.qualifier = qualifier;
         this.propertyDescriptor = descriptor.getOriginal();
-        this.isBackingFieldAccess = false;
+        this.isBackingFieldAccess = isBackingFieldAccess;
     }
 
     @Override
@@ -158,6 +163,13 @@ public final class PropertyAccessTranslator extends AccessTranslator {
 
     @NotNull
     private JsExpression getterCall() {
+        //TODO: HACK to make standard example work
+        if (DescriptorUtils.getFQName(propertyDescriptor).equals("jet.String.length")) {
+            JsNameRef lengthMethodReference = AstUtil.newQualifiedNameRef("length");
+            AstUtil.setQualifier(lengthMethodReference, translateQualifier());
+            return lengthMethodReference;
+        }
+
         JsName getterName = getGetterName();
         return qualifiedAccessorInvocation(getterName);
     }
@@ -213,10 +225,12 @@ public final class PropertyAccessTranslator extends AccessTranslator {
 
     @NotNull
     private JsName getGetterName() {
-        //TODO: hack alert. properties for standard objects that do not have their implementation do not have getters
+        //TODO: hack alert. properties for standard objects that do not have their implementation
+        // do not have getters and thus this workaround is needed
         if (context().isStandardObject(propertyDescriptor)) {
             return context().getNameForStandardObject(propertyDescriptor);
         }
+
         PropertyGetterDescriptor getter = getGetterDescriptor();
         return context().getNameForDescriptor(getter);
     }
@@ -241,12 +255,4 @@ public final class PropertyAccessTranslator extends AccessTranslator {
         return setter;
     }
 
-    @NotNull
-    private PropertyDescriptor getPropertyDescriptor(@NotNull JetSimpleNameExpression expression) {
-        DeclarationDescriptor descriptor =
-                getDescriptorForReferenceExpression(context().bindingContext(), expression);
-        //TODO
-        assert descriptor instanceof PropertyDescriptor;
-        return (PropertyDescriptor) descriptor;
-    }
 }

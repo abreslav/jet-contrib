@@ -9,7 +9,7 @@ import org.jetbrains.k2js.translate.context.TranslationContext;
 import static org.jetbrains.k2js.translate.utils.TranslationUtils.zeroLiteral;
 
 /**
- * @author Talanov Pavel
+ * @author Pavel Talanov
  */
 public final class IntrinsicArrayUtils {
 
@@ -34,7 +34,7 @@ public final class IntrinsicArrayUtils {
     }
 
     @NotNull
-    public static JsExpression throwOutOfBoundsException() {
+    private static JsExpression throwOutOfBoundsException() {
         //TODO: think about exception
         return new JsThisRef();
     }

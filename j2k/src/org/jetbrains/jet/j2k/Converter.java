@@ -115,7 +115,8 @@ public class Converter {
   @NotNull
   private static List<Parameter> createParametersFromFields(@NotNull List<? extends Field> fields) {
     List<Parameter> result = new LinkedList<Parameter>();
-    for (Field f : fields) result.add(new Parameter(f.getIdentifier(), f.getType()));
+    for (Field f : fields)
+      result.add(new Parameter(new IdentifierImpl("_" + f.getIdentifier().getName()), f.getType()));
     return result;
   }
 
@@ -124,7 +125,7 @@ public class Converter {
     List<Statement> result = new LinkedList<Statement>();
     for (Field f : fields) {
       final String identifierToKotlin = f.getIdentifier().toKotlin();
-      result.add(new DummyStringExpression("$" + identifierToKotlin + " = " + identifierToKotlin));
+      result.add(new DummyStringExpression(identifierToKotlin + " = " + "_" + identifierToKotlin));
     }
     return result;
   }
@@ -364,6 +365,28 @@ public class Converter {
   }
 
   private static boolean isOverrideAnyMethodExceptMethodsFromObject(@NotNull PsiMethod method) {
+    boolean counter = normalCase(method);
+    if (counter)
+      return true;
+    if (isInheritFromObject(method))
+      return caseForObject(method);
+    return false;
+  }
+
+  private static boolean caseForObject(@NotNull PsiMethod method) {
+    PsiClass containing = method.getContainingClass();
+    if (containing != null) {
+      for (PsiClassType s : containing.getSuperTypes()) {
+        String canonicalText = s.getCanonicalText();
+        if (!canonicalText.equals("java.lang.Object") && !getClassIdentifiers().contains(canonicalText)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  private static boolean normalCase(@NotNull PsiMethod method) {
     int counter = 0;
     for (HierarchicalMethodSignature s : method.getHierarchicalMethodSignature().getSuperSignatures()) {
       PsiClass containingClass = s.getMethod().getContainingClass();
@@ -372,6 +395,17 @@ public class Converter {
         counter++;
     }
     return counter > 0;
+  }
+
+  private static boolean isInheritFromObject(@NotNull PsiMethod method) {
+    List<HierarchicalMethodSignature> superSignatures = method.getHierarchicalMethodSignature().getSuperSignatures();
+    for (HierarchicalMethodSignature s : superSignatures) {
+      PsiClass containingClass = s.getMethod().getContainingClass();
+      String qualifiedName = containingClass != null ? containingClass.getQualifiedName() : "";
+      if (qualifiedName != null && qualifiedName.equals("java.lang.Object"))
+        return true;
+    }
+    return false;
   }
 
   private static boolean isOverrideObjectDirect(@NotNull final PsiMethod method) {
@@ -591,11 +625,12 @@ public class Converter {
     if (expression != null) {
       PsiType actualType = expression.getType();
       if (actualType != null) {
+        if (Node.PRIMITIVE_TYPES.contains(actualType.getCanonicalText()) && (expression instanceof PsiReferenceExpression
+          && ((PsiReferenceExpression) expression).isQualified() || expression instanceof PsiMethodCallExpression)
+          && expressionToExpression(expression).toKotlin().contains("?."))
+          conversion += ".sure()";
         if (isConversionNeeded(actualType, expectedType))
           conversion += getPrimitiveTypeConversion(expectedType.getCanonicalText());
-        if (Node.PRIMITIVE_TYPES.contains(actualType.getCanonicalText()) && (expression instanceof PsiReferenceExpression && ((PsiReferenceExpression) expression).isQualified() ||
-          expression instanceof PsiMethodCallExpression))
-          conversion += ".sure()";
       }
     }
     return conversion;
@@ -651,7 +686,7 @@ public class Converter {
 //  }
 
   @NotNull
-  public static SureCallChainExpression createSureCallOnlyForChain(PsiExpression expression, PsiType type) {
+  public static SureCallChainExpression createSureCallOnlyForChain(@Nullable PsiExpression expression, @NotNull PsiType type) {
     String conversion = (expression != null && (expression instanceof PsiReferenceExpression || expression instanceof PsiMethodCallExpression)) ?
       createConversionForExpression(expression, type) : "";
     return new SureCallChainExpression(expressionToExpression(expression), conversion);

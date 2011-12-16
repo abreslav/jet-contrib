@@ -6,7 +6,8 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jet.j2k.ast.*;
 
-import java.util.*;
+import java.util.Collections;
+import java.util.List;
 
 import static org.jetbrains.jet.j2k.Converter.*;
 
@@ -188,7 +189,7 @@ public class ExpressionVisitor extends StatementVisitor {
       if (canonicalTypeStr.equals("char") || canonicalTypeStr.equals("java.lang.Character"))
         isQuotingNeeded = false;
     }
-    myResult = new LiteralExpression(new IdentifierImpl(text, false, false, isQuotingNeeded));
+    myResult = new LiteralExpression(new IdentifierImpl(text, false, isQuotingNeeded));
   }
 
   @Override
@@ -214,11 +215,10 @@ public class ExpressionVisitor extends StatementVisitor {
   @Override
   public void visitNewExpression(@NotNull PsiNewExpression expression) {
     super.visitNewExpression(expression);
-
-    if (expression.getArrayInitializer() != null) // new Foo[] {}
+    if (expression.getArrayInitializer() != null) // new Foo[] {Foo(1), Foo(2)}
       myResult = createNewEmptyArray(expression);
     else if (expression.getArrayDimensions().length > 0) { // new Foo[5]
-      myResult = createNewNonEmptyArray(expression);
+      myResult = createNewEmptyArrayWithoutInitialization(expression);
     } else { // new Class(): common case
       myResult = createNewClassExpression(expression);
     }
@@ -254,12 +254,10 @@ public class ExpressionVisitor extends StatementVisitor {
   }
 
   @NotNull
-  private static NewClassExpression createNewNonEmptyArray(@NotNull PsiNewExpression expression) {
-    final List<Expression> callExpression = expressionsToExpressionList(expression.getArrayDimensions());
-    callExpression.add(new IdentifierImpl("{null}")); // TODO: remove
-    return new NewClassExpression(
-      typeToType(expression.getType()),
-      callExpression
+  private static Expression createNewEmptyArrayWithoutInitialization(@NotNull PsiNewExpression expression) {
+    return new ArrayWithoutInitializationExpression(
+      typeToType(expression.getType(), true),
+      expressionsToExpressionList(expression.getArrayDimensions())
     );
   }
 
@@ -313,15 +311,11 @@ public class ExpressionVisitor extends StatementVisitor {
 
     Expression identifier = new IdentifierImpl(expression.getReferenceName(), isNullable);
 
-    if (hasDollar)
-      identifier = new IdentifierImpl(expression.getReferenceName(), hasDollar, isNullable);
-    else {
-      final String temporaryObject = "__";
-      if (hasReceiver)
-        identifier = new CallChainExpression(new IdentifierImpl(temporaryObject, false), new IdentifierImpl(expression.getReferenceName(), isNullable));
-      else if (insideSecondaryConstructor && isThis)
-        identifier = new IdentifierImpl("val " + temporaryObject + " = " + className); // TODO: hack
-    }
+    final String temporaryObject = "__";
+    if (hasReceiver)
+      identifier = new CallChainExpression(new IdentifierImpl(temporaryObject, false), new IdentifierImpl(expression.getReferenceName(), isNullable));
+    else if (insideSecondaryConstructor && isThis)
+      identifier = new IdentifierImpl("val " + temporaryObject + " = " + className); // TODO: hack
 
     myResult = new CallChainExpression(
       expressionToExpression(expression.getQualifierExpression()),

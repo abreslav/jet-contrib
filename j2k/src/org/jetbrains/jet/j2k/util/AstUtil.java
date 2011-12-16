@@ -82,9 +82,17 @@ public class AstUtil {
       return "(" + f + ")" + s;
   }
 
-  public static <T> T getOrElse(@NotNull Map<T, T> map, T e, T orElse) {
+  @NotNull
+  public static <T> T getOrElse(@NotNull Map<T, T> map, @NotNull T e, @NotNull T orElse) {
     if (map.containsKey(e))
       return map.get(e);
     return orElse;
+  }
+
+  @NotNull
+  public static String replaceLastQuest(@NotNull String str) {
+    if (str.endsWith("?"))
+      return str.substring(0, str.length() - 1);
+    return str;
   }
 }

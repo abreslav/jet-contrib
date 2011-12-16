@@ -7,7 +7,7 @@ import com.google.dart.compiler.util.AstUtil;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * @author Talanov Pavel
+ * @author Pavel Talanov
  */
 public final class TemporaryVariable {
 
@@ -27,7 +27,7 @@ public final class TemporaryVariable {
     }
 
     @NotNull
-        /*package*/ JsName name() {
+    public JsName name() {
         return variableName;
     }
 

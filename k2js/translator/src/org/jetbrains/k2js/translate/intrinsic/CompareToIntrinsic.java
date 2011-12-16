@@ -5,14 +5,14 @@ import org.jetbrains.jet.lang.types.expressions.OperatorConventions;
 import org.jetbrains.jet.lexer.JetToken;
 
 /**
- * @author Talanov Pavel
+ * @author Pavel Talanov
  */
 public abstract class CompareToIntrinsic implements Intrinsic {
 
     private JetToken comparisonToken = null;
 
     @NotNull
-    public JetToken getComparisonToken() {
+    protected JetToken getComparisonToken() {
         assert comparisonToken != null : "Should use set token first";
         return comparisonToken;
     }

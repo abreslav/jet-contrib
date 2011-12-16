@@ -3,7 +3,7 @@ package org.jetbrains.k2js.translate.intrinsic;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * @author Talanov Pavel
+ * @author Pavel Talanov
  */
 public abstract class EqualsIntrinsic implements Intrinsic {
 
@@ -14,7 +14,7 @@ public abstract class EqualsIntrinsic implements Intrinsic {
         this.isNegated = isNegated;
     }
 
-    public boolean isNegated() {
+    protected boolean isNegated() {
         return isNegated;
     }
 }

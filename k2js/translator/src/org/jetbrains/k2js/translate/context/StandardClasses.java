@@ -17,7 +17,7 @@ import static org.jetbrains.jet.lang.resolve.DescriptorUtils.getFQName;
 import static org.jetbrains.k2js.translate.utils.DescriptorUtils.*;
 
 /**
- * @author Talanov Pavel
+ * @author Pavel Talanov
  */
 public final class StandardClasses {
 
@@ -28,15 +28,22 @@ public final class StandardClasses {
         StandardClasses standardClasses = new StandardClasses(kotlinObjectScope);
         declareArray(standardClasses, standardLibrary);
         declareIterator(standardClasses, standardLibrary);
-        declareRange(standardClasses, standardLibrary);
+        declareRange(standardClasses);
+        declareString(standardClasses);
         declareJavaArrayList(standardClasses);
         declareJavaSystem(standardClasses);
         declareJavaInteger(standardClasses);
         return standardClasses;
     }
 
+    private static void declareString(@NotNull StandardClasses standardClasses) {
+        String stringFQName = "jet.String";
+        standardClasses.declareStandardTopLevelObject(stringFQName, "String");
+        standardClasses.declareStandardInnerDeclaration(stringFQName, "length", "length");
+    }
+
     //TODO: duplication
-    private static void declareRange(@NotNull StandardClasses standardClasses, @NotNull JetStandardLibrary standardLibrary) {
+    private static void declareRange(@NotNull StandardClasses standardClasses) {
         String intRangeFQName = "jet.IntRange";
         standardClasses.declareStandardTopLevelObject(intRangeFQName, "NumberRange");
         standardClasses.declareStandardInnerDeclaration(intRangeFQName, "<init>", "NumberRange");
@@ -108,7 +115,6 @@ public final class StandardClasses {
         }
     }
 
-
     @NotNull
     private final JsScope kotlinScope;
 
@@ -128,7 +134,9 @@ public final class StandardClasses {
     }
 
     private void declareStandardTopLevelObject(@NotNull String fullQualifiedName, @NotNull String kotlinLibName) {
-        nameMap.put(fullQualifiedName, kotlinScope.declareName(kotlinLibName));
+        JsName declaredName = kotlinScope.declareName(kotlinLibName);
+        declaredName.setObfuscatable(false);
+        nameMap.put(fullQualifiedName, declaredName);
         scopeMap.put(fullQualifiedName, new JsScope(kotlinScope, "standard object " + kotlinLibName));
     }
 
@@ -143,7 +151,9 @@ public final class StandardClasses {
                                                  @NotNull String kotlinLibName) {
         JsScope classScope = scopeMap.get(fullQualifiedClassName);
         String fullQualifiedMethodName = fullQualifiedClassName + "." + shortMethodName;
-        nameMap.put(fullQualifiedMethodName, classScope.declareName(kotlinLibName));
+        JsName declaredName = classScope.declareName(kotlinLibName);
+        declaredName.setObfuscatable(false);
+        nameMap.put(fullQualifiedMethodName, declaredName);
     }
 
     public boolean isStandardObject(@NotNull DeclarationDescriptor descriptor) {

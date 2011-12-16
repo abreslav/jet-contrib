@@ -10,7 +10,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * @author Talanov Pavel
+ * @author Pavel Talanov
  */
 public final class NamingScope {
 
@@ -59,9 +59,26 @@ public final class NamingScope {
     @NotNull
     public JsName declareVariable(@NotNull DeclarationDescriptor descriptor,
                                   @NotNull String name) {
-        JsName declaredName = scope.declareName(name);
+        JsName declaredName = scope.declareName(mayBeObfuscateName(name));
         descriptorToNameMap.put(descriptor, declaredName);
         return declaredName;
+    }
+
+    //TODO: temporary solution
+    @NotNull
+    private String mayBeObfuscateName(@NotNull String name) {
+        int obfuscate = 0;
+        String result = name;
+//        while (true) {
+//            JsName existingNameWithSameIdent = scope.findExistingName(result);
+//            boolean isDuplicate = (existingNameWithSameIdent != null) && (scope.ownsName(existingNameWithSameIdent));
+//
+//            if (!isDuplicate) break;
+//
+//            result = name + "$" + obfuscate;
+//            obfuscate++;
+//        }
+        return result;
     }
 
     @NotNull
@@ -76,10 +93,6 @@ public final class NamingScope {
     //TODO protect global namespace
     public JsName declareTemporary() {
         return scope.declareTemporary();
-    }
-
-    public JsName declareTemporaryWithName(@NotNull String preferredName) {
-        return scope.declareName(preferredName);
     }
 
     @NotNull

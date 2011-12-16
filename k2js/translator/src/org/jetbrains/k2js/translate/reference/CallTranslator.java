@@ -29,7 +29,7 @@ import static org.jetbrains.k2js.translate.utils.PsiUtils.isNotInOperation;
 import static org.jetbrains.k2js.translate.utils.TranslationUtils.*;
 
 /**
- * @author Talanov Pavel
+ * @author Pavel Talanov
  */
 //TODO: move translate() static methods into builder (consider!)
 //TODO: write tests on calling backing fields as functions
@@ -85,7 +85,8 @@ public final class CallTranslator extends AbstractTranslator {
         return translate(context, receiver, arguments, functionDescriptor);
     }
 
-    public static JsExpression mayBeWrapWithNegation(@NotNull JsExpression expression, boolean shouldWrap) {
+    @NotNull
+    private static JsExpression mayBeWrapWithNegation(@NotNull JsExpression expression, boolean shouldWrap) {
         if (shouldWrap) {
             return not(expression);
         } else {
@@ -167,6 +168,7 @@ public final class CallTranslator extends AbstractTranslator {
         return functionIntrinsic.apply(receiver, arguments, context());
     }
 
+    @NotNull
     private JsInvocation methodCall() {
         return AstUtil.newInvocation(calleeReference(), arguments);
     }
@@ -209,6 +211,7 @@ public final class CallTranslator extends AbstractTranslator {
         return methodReference;
     }
 
+    @NotNull
     private JsExpression extensionFunctionReference(@NotNull JsExpression methodReference) {
         JsExpression qualifier = TranslationUtils.getExtensionFunctionImplicitReceiver(context(), functionDescriptor);
         if (qualifier != null) {

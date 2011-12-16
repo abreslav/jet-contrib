@@ -27,7 +27,7 @@ import static org.jetbrains.k2js.translate.utils.TranslationUtils.translateRight
 
 
 /**
- * @author Talanov Pavel
+ * @author Pavel Talanov
  */
 public final class BinaryOperationTranslator extends AbstractTranslator {
 
@@ -37,6 +37,12 @@ public final class BinaryOperationTranslator extends AbstractTranslator {
         return (new BinaryOperationTranslator(expression, context).translate());
     }
 
+    @NotNull
+    private final JetBinaryExpression expression;
+
+    @Nullable
+    private final FunctionDescriptor operationDescriptor;
+
     private BinaryOperationTranslator(@NotNull JetBinaryExpression expression,
                                       @NotNull TranslationContext context) {
         super(context);
@@ -44,12 +50,6 @@ public final class BinaryOperationTranslator extends AbstractTranslator {
         this.operationDescriptor =
                 getFunctionDescriptorForOperationExpression(context().bindingContext(), expression);
     }
-
-    @NotNull
-    private final JetBinaryExpression expression;
-
-    @Nullable
-    private final FunctionDescriptor operationDescriptor;
 
     @NotNull
     private JsExpression translate() {

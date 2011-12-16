@@ -12,8 +12,9 @@ import org.jetbrains.k2js.translate.general.Translation;
 import static com.google.dart.compiler.util.AstUtil.sum;
 
 /**
- * @author Talanov Pavel
+ * @author Pavel Talanov
  */
+//TODO: add toString call for non-primitive object
 public final class StringTemplateTranslator extends AbstractTranslator {
 
     @NotNull
@@ -21,7 +22,6 @@ public final class StringTemplateTranslator extends AbstractTranslator {
                                          @NotNull TranslationContext context) {
         return (new StringTemplateTranslator(expression, context).translate());
     }
-
 
     @NotNull
     private final JetStringTemplateExpression expression;

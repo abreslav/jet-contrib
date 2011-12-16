@@ -12,7 +12,7 @@ import org.jetbrains.k2js.translate.utils.BindingUtils;
 import static org.jetbrains.jet.lang.resolve.DescriptorUtils.getFQName;
 
 /**
- * @author Talanov Pavel
+ * @author Pavel Talanov
  */
 public final class TranslationContext {
 
@@ -157,13 +157,13 @@ public final class TranslationContext {
 
     @NotNull
     public TemporaryVariable newAliasForThis() {
-        TemporaryVariable aliasForThis = dynamicContext.declareTemporaryWithName("that", new JsThisRef());
+        TemporaryVariable aliasForThis = dynamicContext.declareTemporary(new JsThisRef());
         aliaser().setAliasForThis(aliasForThis.name());
         return aliasForThis;
     }
 
-    public void removeAliasForThis() {
-        aliaser().removeAliasForThis();
+    public void removeAliasForThis(@NotNull JsName aliasToRemove) {
+        aliaser().removeAliasForThis(aliasToRemove);
     }
 
     @NotNull

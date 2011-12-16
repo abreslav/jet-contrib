@@ -3,7 +3,7 @@ package org.jetbrains.k2js.test;
 import org.junit.Test;
 
 /**
- * @author Talanov Pavel
+ * @author Pavel Talanov
  */
 public final class ExtensionFunctionTest extends TranslationTest {
     final private static String MAIN = "extensionFunction/";
@@ -46,5 +46,10 @@ public final class ExtensionFunctionTest extends TranslationTest {
     @Test
     public void extensionLiteralPassedToFunction() throws Exception {
         testFooBoxIsTrue("extensionLiteralPassedToFunction.kt");
+    }
+
+    @Test
+    public void extensionInsideFunctionLiteral() throws Exception {
+        testFooBoxIsTrue("extensionInsideFunctionLiteral.kt");
     }
 }
