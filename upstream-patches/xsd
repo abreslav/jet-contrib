@@ -11,10 +11,10 @@ index 463eb8b..96c28f6 100644
        <module fileurl="file://$PROJECT_DIR$/idea/idea.iml" filepath="$PROJECT_DIR$/idea/idea.iml" />
        <module fileurl="file://$PROJECT_DIR$/stdlib/stdlib.iml" filepath="$PROJECT_DIR$/stdlib/stdlib.iml" />
 diff --git a/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java b/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java
-index 38a87f1..b07b595 100644
+index da88942..85cde77 100644
 --- a/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java
 +++ b/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java
-@@ -748,7 +748,7 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> {
+@@ -794,7 +794,7 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> {
      }
  
      private void markLineNumber(JetElement statement) {
@@ -46,55 +46,57 @@ index 461c528..30da023 100644
                      if (ApplicationManager.getApplication().isInternal()) {
                          e.printStackTrace();
 diff --git a/compiler/frontend.java/frontend.java.iml b/compiler/frontend.java/frontend.java.iml
-index ec086b2..e960f76 100644
+index 5102197..f5aa63f 100644
 --- a/compiler/frontend.java/frontend.java.iml
 +++ b/compiler/frontend.java/frontend.java.iml
-@@ -8,6 +8,7 @@
-     <orderEntry type="jdk" jdkName="IDEA 10.x" jdkType="IDEA JDK" />
+@@ -9,6 +9,7 @@
      <orderEntry type="sourceFolder" forTests="false" />
      <orderEntry type="module" module-name="frontend" />
+     <orderEntry type="module" module-name="stdlib" />
 +    <orderEntry type="module" module-name="frontend.xsd" />
    </component>
  </module>
  
 diff --git a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/JavaBridgeConfiguration.java b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/JavaBridgeConfiguration.java
-index a160b70..f8e7b1f 100644
+index d2dc2bd..7f2f2fb 100644
 --- a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/JavaBridgeConfiguration.java
 +++ b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/JavaBridgeConfiguration.java
 @@ -8,6 +8,7 @@ import org.jetbrains.jet.lang.descriptors.NamespaceDescriptor;
  import org.jetbrains.jet.lang.resolve.BindingTrace;
  import org.jetbrains.jet.lang.resolve.DescriptorUtils;
  import org.jetbrains.jet.lang.resolve.scopes.WritableScope;
-+import org.jetbrains.jet.lang.resolve.xsd2k.XSDScope;
++import org.jetbrains.jet.lang.resolve.xsd2k.XsdScope;
  
  /**
   * @author abreslav
-@@ -15,9 +16,11 @@ import org.jetbrains.jet.lang.resolve.scopes.WritableScope;
+@@ -15,11 +16,13 @@ import org.jetbrains.jet.lang.resolve.scopes.WritableScope;
  public class JavaBridgeConfiguration implements Configuration {
  
-     public static Configuration createJavaBridgeConfiguration(@NotNull Project project, @NotNull BindingTrace trace) {
+     public static Configuration createJavaBridgeConfiguration(@NotNull Project project, @NotNull BindingTrace trace, Configuration delegateConfiguration) {
 +        JavaBridgeConfiguration.project = project;
-         return new JavaBridgeConfiguration(project, trace);
+         return new JavaBridgeConfiguration(project, trace, delegateConfiguration);
      }
  
-+    private static Project project;
      private final JavaSemanticServices javaSemanticServices;
+     private final Configuration delegateConfiguration;
++    private static Project project;
  
-     private JavaBridgeConfiguration(Project project, BindingTrace trace) {
-@@ -26,8 +29,12 @@ public class JavaBridgeConfiguration implements Configuration {
+     private JavaBridgeConfiguration(Project project, BindingTrace trace, Configuration delegateConfiguration) {
+         this.javaSemanticServices = new JavaSemanticServices(project, JetSemanticServices.createSemanticServices(project), trace);
+@@ -28,8 +31,12 @@ public class JavaBridgeConfiguration implements Configuration {
  
      @Override
-     public void addDefaultImports(BindingTrace trace, WritableScope rootScope) {
+     public void addDefaultImports(@NotNull BindingTrace trace, @NotNull WritableScope rootScope) {
 -        rootScope.importScope(new JavaPackageScope("", null, javaSemanticServices));
 +        final JavaPackageScope javaPackageScope = new JavaPackageScope("", null, javaSemanticServices);
 +        rootScope.importScope(javaPackageScope);
          rootScope.importScope(new JavaPackageScope("java.lang", null, javaSemanticServices));
-+        rootScope.importScope(new XSDScope(project, trace, javaPackageScope, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/maven.xsd", "jet.xsd.maven").getScope());
-+        rootScope.importScope(new XSDScope(project, trace, javaPackageScope, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/shiporder.xsd", "jet.xsd.shiporder").getScope());
-+        rootScope.importScope(new XSDScope(project, trace, javaPackageScope, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/facebook.xsd", "jet.xsd.facebook").getScope());
++        rootScope.importScope(new XsdScope(project, trace, javaPackageScope, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/maven.xsd", "jet.xsd.maven").getScope());
++        rootScope.importScope(new XsdScope(project, trace, javaPackageScope, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/shiporder.xsd", "jet.xsd.shiporder").getScope());
++        rootScope.importScope(new XsdScope(project, trace, javaPackageScope, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/facebook.xsd", "jet.xsd.facebook").getScope());
+         delegateConfiguration.addDefaultImports(trace, rootScope);
      }
  
-     @Override
 diff --git a/compiler/frontend.xsd/frontend.xsd.iml b/compiler/frontend.xsd/frontend.xsd.iml
 new file mode 100644
 index 0000000..e90ce4e
@@ -4935,27 +4937,25 @@ index 0000000..1c90669
 +        </xs:complexType>
 +    </xs:element>
 +</xs:schema>
-diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XSDParser.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XSDParser.java
+diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdParser.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdParser.java
 new file mode 100644
-index 0000000..4bb677a
+index 0000000..15f2c7f
 --- /dev/null
-+++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XSDParser.java
-@@ -0,0 +1,33 @@
++++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdParser.java
+@@ -0,0 +1,37 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k;
 +
 +import com.sun.xml.xsom.parser.XSOMParser;
 +import org.xml.sax.SAXException;
 +
-+import java.io.ByteArrayInputStream;
 +import java.io.File;
 +import java.io.IOException;
-+import java.io.InputStream;
 +
 +/**
 + * @author ignatov
 + */
-+public class XSDParser {
-+    private XSDParser() {
++public class XsdParser {
++    private XsdParser() {
 +    }
 +
 +    @SuppressWarnings("CallToPrintStackTrace")
@@ -4963,7 +4963,7 @@ index 0000000..4bb677a
 +        try {
 +            XSOMParser parser = new XSOMParser();
 +            parser.parse(stream);
-+            XSDVisitor visitor = new XSDVisitor(namespace);
++            XsdVisitor visitor = new XsdVisitor(namespace);
 +            visitor.visit(parser.getResult());
 +            return visitor.getClasses();
 +        } catch (SAXException e) {
@@ -4973,13 +4973,19 @@ index 0000000..4bb677a
 +        }
 +        return "";
 +    }
++
++    public static void main(String [] args) {
++        System.out.println(
++                parse(new File("/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/maven.xsd"), "jet.xsd.maven")
++        );
++    }
 +}
 \ No newline at end of file
-diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XSDScope.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XSDScope.java
+diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdScope.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdScope.java
 new file mode 100644
-index 0000000..b9074ab
+index 0000000..0cfe196
 --- /dev/null
-+++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XSDScope.java
++++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdScope.java
 @@ -0,0 +1,68 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k;
 +
@@ -5007,7 +5013,7 @@ index 0000000..b9074ab
 +/**
 + * @author ignatov
 + */
-+public class XSDScope {
++public class XsdScope {
 +    static HashMap<String, NamespaceDescriptorImpl> importedNamespaces = new HashMap<String, NamespaceDescriptorImpl>();
 +    NamespaceDescriptorImpl namespaceDescriptor;
 +
@@ -5015,10 +5021,10 @@ index 0000000..b9074ab
 +        return importedNamespaces.containsKey(namespaceName);
 +    }
 +
-+    public XSDScope(@NotNull Project project, BindingTrace trace, JetScope javaPackageScope, String xsdFileName, String namespaceName) {
++    public XsdScope(@NotNull Project project, BindingTrace trace, JetScope javaPackageScope, String xsdFileName, String namespaceName) {
 +        if (!importedNamespaces.containsKey(namespaceName)) {
 +
-+            String stream = XSDParser.parse(new File(xsdFileName), namespaceName);
++            String stream = XsdParser.parse(new File(xsdFileName), namespaceName);
 +            namespaceDescriptor = new NamespaceDescriptorImpl(null, Collections.<AnnotationDescriptor>emptyList(), namespaceName);
 +
 +            JetFile file = (JetFile) PsiFileFactory.getInstance(project).createFileFromText("empty.jet", JetFileType.INSTANCE, stream);
@@ -5049,12 +5055,12 @@ index 0000000..b9074ab
 +        return namespaceDescriptor.getMemberScope();
 +    }
 +}
-diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XSDVisitor.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XSDVisitor.java
+diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java
 new file mode 100644
-index 0000000..1ae07f8
+index 0000000..9297473
 --- /dev/null
-+++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XSDVisitor.java
-@@ -0,0 +1,192 @@
++++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java
+@@ -0,0 +1,196 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k;
 +
 +import com.sun.xml.xsom.*;
@@ -5068,7 +5074,7 @@ index 0000000..1ae07f8
 +/**
 + * @author ignatov
 + */
-+class XSDVisitor extends SchemaTreeTraverser {
++class XsdVisitor extends SchemaTreeTraverser {
 +    private final static String HTTP_WWW_W3_ORG_2001_XMLSCHEMA = "http://www.w3.org/2001/XMLSchema";
 +    private final static String OFFSET = "    ";
 +    private final static String N = System.getProperty("line.separator");
@@ -5079,7 +5085,7 @@ index 0000000..1ae07f8
 +        return classesBuilder.toString();
 +    }
 +
-+    public XSDVisitor(String namespace) {
++    public XsdVisitor(String namespace) {
 +        typeMap = new HashMap<String, String>();
 +
 +        initializeTypeMap();
@@ -5163,24 +5169,27 @@ index 0000000..1ae07f8
 +    }
 +
 +    private static String createClassDeclaration(final String name, final List<String> vars) {
-+        return "class" + " " + upperFirst(name) + "(" + N + join(vars, "," + N) + N + ")" + N;
++        return "class" + " " + upperFirst(name) + "(" + N + join(vars, "," + N) + N + ")" + " " + "{" + N +
++               "    fun toXML() = \"<XML>\"" + N +
++               "}" + N;
 +    }
 +
 +    private List<String> getVars(final XSModelGroup modelGroup) {
-+        final List<String> vars = new LinkedList<String>();
++        final List<String> arguments = new LinkedList<String>();
 +        for (XSParticle c : modelGroup.getChildren()) {
 +            if (c.getTerm().isElementDecl()) {
 +                final XSElementDecl elementDecl = c.getTerm().asElementDecl();
 +                final boolean isNullable = c.getMinOccurs() < 1;
 +                final boolean isMultiply = c.getMaxOccurs() == -1;
 +                final String maybeList = isMultiply ? "List" : "";
-+                vars.add(
-+                        OFFSET + "var" + " " + elementDecl.getName() + maybeList + " : " +
++                String var = isMultiply ? "val" : "var";
++                arguments.add(
++                        OFFSET + var + " " + elementDecl.getName() + maybeList + " : " +
 +                        getType(elementDecl.getType(), elementDecl.getName(), isMultiply, isNullable)
 +                );
 +            }
 +        }
-+        return vars;
++        return arguments;
 +    }
 +
 +    private static String addListAndQuestIfNeeded(String type, boolean isMultiply, boolean isNullable) {
@@ -5225,7 +5234,8 @@ index 0000000..1ae07f8
 +    }
 +
 +    private static String upperFirst(String string) {
-+        return string.substring(0, 1).toUpperCase() + string.substring(1);
++        return string;
++//        return string.substring(0, 1).toUpperCase() + string.substring(1);
 +    }
 +
 +    private static String join(final String[] array, final String delimiter) {
@@ -5247,6 +5257,367 @@ index 0000000..1ae07f8
 +        return join(array.toArray(new String[array.size()]), delimiter);
 +    }
 +}
+diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdChangerCommon.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdChangerCommon.java
+new file mode 100644
+index 0000000..45f2309
+--- /dev/null
++++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdChangerCommon.java
+@@ -0,0 +1,91 @@
++package org.jetbrains.jet.lang.resolve.xsd2k.changers;
++
++import com.intellij.openapi.project.Project;
++import org.jetbrains.annotations.Nullable;
++import org.jetbrains.jet.lang.descriptors.DeclarationDescriptor;
++import org.jetbrains.jet.lang.psi.*;
++import org.jetbrains.jet.lang.resolve.BindingContext;
++import org.jetbrains.jet.lang.resolve.xsd2k.XsdScope;
++import org.jetbrains.jet.lang.types.JetType;
++import org.jetbrains.jet.lang.types.TypeConstructor;
++
++/**
++ * @author ignatov
++ */
++public class XsdChangerCommon extends JetVisitorVoid {
++    public static final String COMMA_SPACE = ", ";
++    public static final String LBRACE = "(";
++    public static final String RBRACE = ")";
++    public static final String Q = "\"";
++    public static final String QUEST_DOT = "?.";
++
++    BindingContext bindingContext;
++
++    public XsdChangerCommon(BindingContext bindingContext) {
++        this.bindingContext = bindingContext;
++    }
++
++    protected static boolean isListType(@Nullable JetType type) {
++        if (type == null) {
++            return false;
++        }
++        TypeConstructor typeConstructor = type.getConstructor();
++        return typeConstructor.toString().equals("List") && typeConstructor.getParameters().size() == 1;
++    }
++
++    @Override
++    public void visitJetElement(JetElement element) {
++        element.acceptChildren(this);
++    }
++
++    @Override
++    public void visitNamespace(JetNamespace namespace) {
++//        ImportClassHelper.perform("org.jdom.Element", namespace);
++        namespace.acceptChildren(this);
++    }
++
++    @Override
++    public void visitNamedFunction(JetNamedFunction function) {
++        final Project project = function.getProject();
++
++        for (final JetParameter p : function.getValueParameters()) {
++            if (fromXSD(bindingContext.get(BindingContext.TYPE, p.getTypeReference()))) {
++                p.replace(JetPsiFactory.createParameter(project, p.getName(), "Element?"));
++            }
++        }
++        super.visitNamedFunction(function);
++    }
++
++    static boolean fromXSD(@Nullable JetType type) {
++        if (type != null) {
++            try {
++                return fromXSD(getTopContainerDeclaration(type.getConstructor().getDeclarationDescriptor()));
++            } catch (UnsupportedOperationException ignored) {
++                return false;
++            }
++        }
++        return false;
++    }
++
++    private static DeclarationDescriptor getTopContainerDeclaration(DeclarationDescriptor declarationDescriptor) {
++        while (declarationDescriptor != null) {
++            DeclarationDescriptor containingDeclaration = declarationDescriptor.getContainingDeclaration();
++            if (containingDeclaration == null) {
++                return declarationDescriptor;
++            }
++            declarationDescriptor = containingDeclaration;
++        }
++        return declarationDescriptor;
++    }
++
++    @Override
++    public void visitReferenceExpression(JetReferenceExpression expression) {
++        super.visitReferenceExpression(expression);
++    }
++
++    static boolean fromXSD(DeclarationDescriptor declarationDescriptor) {
++        declarationDescriptor = getTopContainerDeclaration(declarationDescriptor);
++        return declarationDescriptor != null &&
++               XsdScope.isImported(declarationDescriptor.getName());
++    }
++}
+diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java
+new file mode 100644
+index 0000000..2f1a9b6
+--- /dev/null
++++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java
+@@ -0,0 +1,105 @@
++package org.jetbrains.jet.lang.resolve.xsd2k.changers;
++
++import com.google.common.base.Joiner;
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.jet.lang.descriptors.CallableDescriptor;
++import org.jetbrains.jet.lang.descriptors.ConstructorDescriptor;
++import org.jetbrains.jet.lang.descriptors.DeclarationDescriptor;
++import org.jetbrains.jet.lang.descriptors.ValueParameterDescriptor;
++import org.jetbrains.jet.lang.psi.*;
++import org.jetbrains.jet.lang.resolve.BindingContext;
++import org.jetbrains.jet.lang.resolve.calls.ResolvedCall;
++
++import java.util.LinkedList;
++import java.util.List;
++
++/**
++ * @author ignatov
++ */
++public class XsdConstructorChanger extends XsdChangerCommon {
++    public XsdConstructorChanger(BindingContext bindingContext) {
++        super(bindingContext);
++    }
++
++    private boolean isXsdClassConstructorInvocation(@NotNull JetCallExpression expression, BindingContext context) {
++        if (isConstructorInvocation(expression, bindingContext)) {
++            JetExpression calleeExpression = expression.getCalleeExpression();
++            if (calleeExpression != null && calleeExpression instanceof JetReferenceExpression) {
++                DeclarationDescriptor declarationDescriptor = bindingContext.get(BindingContext.REFERENCE_TARGET, (JetReferenceExpression) calleeExpression);
++                if (fromXSD(declarationDescriptor)) {
++                    return true;
++                }
++            }
++        }
++        return false;
++    }
++
++    @Override
++    public void visitCallExpression(JetCallExpression expression) {
++        if (isXsdClassConstructorInvocation(expression, bindingContext)) {
++            JetExpression calleeExpression = expression.getCalleeExpression();
++            DeclarationDescriptor declarationDescriptor = bindingContext.get(BindingContext.REFERENCE_TARGET, (JetReferenceExpression) calleeExpression);
++
++            List<String> names = new LinkedList<String>();
++            List<String> values = new LinkedList<String>();
++            List<String> actions = new LinkedList<String>();
++            if (declarationDescriptor instanceof ConstructorDescriptor) {
++                for (ValueParameterDescriptor p : ((ConstructorDescriptor) declarationDescriptor).getValueParameters()) {
++                    if (isListType(p.getOutType())) { // addContent
++                        actions.add("addContent");
++                    }
++                    else { // setAttribute
++                        actions.add("setAttribute");
++                    }
++                    names.add(p.getName());
++                }
++            }
++            List<? extends ValueArgument> valueArguments = expression.getValueArguments();
++            for (ValueArgument va : valueArguments) {
++                JetExpression argumentExpression = va.getArgumentExpression();
++                if (argumentExpression != null) {
++                    values.add(argumentExpression.getText());
++                }
++            }
++            String text = "Element" + LBRACE + Q + calleeExpression.getText() + Q + RBRACE + createChainOfSetAttribute(names, values, actions);
++            expression.replace(JetPsiFactory.createExpression(expression.getProject(), text));
++        }
++        super.visitCallExpression(expression);
++    }
++
++    private static boolean isConstructorInvocation(@NotNull JetCallExpression expression, BindingContext context) {
++        JetExpression calleeExpression = expression.getCalleeExpression();
++        assert calleeExpression != null : "JetCallExpression should have not null callee";
++        ResolvedCall<?> resolvedCall = context.get(BindingContext.RESOLVED_CALL, calleeExpression);
++        if (resolvedCall == null) {
++            return false;
++        }
++        CallableDescriptor descriptor = resolvedCall.getCandidateDescriptor();
++        return (descriptor instanceof ConstructorDescriptor);
++    }
++
++    @NotNull
++    private static String createChainOfSetAttribute(@NotNull List<String> names, @NotNull List<String> values, @NotNull List<String> actions) {
++        List<String> result = new LinkedList<String>();
++        if (names.size() == values.size()) {
++            int size = names.size();
++            for (int i = 0; i < size; i++) {
++                if (actions.get(i).equals("addContent")) {
++                    result.add("addContent" + LBRACE + values.get(i) + RBRACE);
++                }
++                else {
++                    result.add("setAttribute" + LBRACE + Q + names.get(i) + Q + COMMA_SPACE + quoteIfNeeded(values.get(i)) + RBRACE);
++                }
++            }
++            return "." + Joiner.on(QUEST_DOT).join(result);
++        }
++        return "";
++    }
++
++    private static String quoteIfNeeded(String string) {
++        if (string.startsWith("\"") && string.startsWith("\"")) {
++            return string;
++        }
++        return Q + string + Q;
++    }
++}
+diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGenericChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGenericChanger.java
+new file mode 100644
+index 0000000..8a2efcb
+--- /dev/null
++++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGenericChanger.java
+@@ -0,0 +1,24 @@
++package org.jetbrains.jet.lang.resolve.xsd2k.changers;
++
++import org.jetbrains.jet.lang.psi.JetPsiFactory;
++import org.jetbrains.jet.lang.psi.JetTypeProjection;
++import org.jetbrains.jet.lang.resolve.BindingContext;
++import org.jetbrains.jet.lang.types.JetType;
++
++/**
++ * @author ignatov
++ */
++public class XsdGenericChanger extends XsdChangerCommon {
++    public XsdGenericChanger(BindingContext bindingContext) {
++        super(bindingContext);
++    }
++
++    @Override
++    public void visitTypeProjection(JetTypeProjection typeProjection) {
++        JetType jetType = bindingContext.get(BindingContext.TYPE, typeProjection.getTypeReference());
++        if (fromXSD(jetType)) {
++            typeProjection.replace(JetPsiFactory.createTypeProjection(typeProjection.getProject(), "Element?"));
++        }
++        super.visitTypeProjection(typeProjection);
++    }
++}
+diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java
+new file mode 100644
+index 0000000..3dab89e
+--- /dev/null
++++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java
+@@ -0,0 +1,42 @@
++package org.jetbrains.jet.lang.resolve.xsd2k.changers;
++
++import org.jetbrains.jet.lang.psi.JetDotQualifiedExpression;
++import org.jetbrains.jet.lang.psi.JetExpression;
++import org.jetbrains.jet.lang.psi.JetPsiFactory;
++import org.jetbrains.jet.lang.psi.JetSafeQualifiedExpression;
++import org.jetbrains.jet.lang.resolve.BindingContext;
++import org.jetbrains.jet.lang.types.JetType;
++
++import static java.text.MessageFormat.format;
++
++/**
++ * @author ignatov
++ */
++public class XsdGetterChanger extends XsdChangerCommon {
++    public XsdGetterChanger(BindingContext bindingContext) {
++        super(bindingContext);
++    }
++
++    @Override
++    public void visitSafeQualifiedExpression(JetSafeQualifiedExpression expression) {
++        super.visitSafeQualifiedExpression(expression);
++    }
++
++    @Override
++    public void visitDotQualifiedExpression(JetDotQualifiedExpression expression) {
++        JetExpression receiver = expression.getReceiverExpression();
++        JetExpression selector = expression.getSelectorExpression();
++        JetType receiverType = bindingContext.get(BindingContext.EXPRESSION_TYPE, receiver);
++        JetType selectorType = bindingContext.get(BindingContext.EXPRESSION_TYPE, selector);
++        if (fromXSD(receiverType)) {
++            if (selector != null && !selector.getText().equals("toXML()")) {
++                String action = format("{0}?.getAttributeValue(\"{1}\")", receiver.getText(), selector.getText());
++                if (isListType(selectorType)) {
++                    action = format("({0}?.getChildren(\"{1}\") as List<org.jdom.Element>)", receiver.getText(), selector.getText().replace("List", ""));
++                }
++                expression.replace(JetPsiFactory.createExpression(expression.getProject(), action));
++            }
++        }
++        super.visitDotQualifiedExpression(expression);
++    }
++}
+diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java
+new file mode 100644
+index 0000000..bf0f0b3
+--- /dev/null
++++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java
+@@ -0,0 +1,55 @@
++package org.jetbrains.jet.lang.resolve.xsd2k.changers;
++
++import com.intellij.openapi.util.Pair;
++import org.jetbrains.jet.lang.psi.*;
++import org.jetbrains.jet.lang.resolve.BindingContext;
++import org.jetbrains.jet.lang.types.JetType;
++
++import java.util.LinkedList;
++import java.util.List;
++
++import static java.text.MessageFormat.format;
++import static org.jetbrains.jet.lang.psi.JetPsiFactory.createExpression;
++
++/**
++ * @author ignatov
++ */
++public class XsdSetterChanger extends XsdChangerCommon {
++    public XsdSetterChanger(BindingContext bindingContext) {
++        super(bindingContext);
++    }
++
++    List<Pair<JetExpression, JetExpression>> replaces = new LinkedList<Pair<JetExpression, JetExpression>>();
++
++    public void apply() {
++        for (Pair<JetExpression, JetExpression> p : replaces)
++            p.getFirst().replace(p.getSecond());
++    }
++
++    @Override
++    public void visitBinaryExpression(JetBinaryExpression expression) {
++        if (expression.getOperationToken().toString().equals("EQ")) {
++            JetExpression left = expression.getLeft();
++            JetExpression right = expression.getRight();
++            if (left instanceof JetQualifiedExpression) {
++                JetExpression receiver = ((JetQualifiedExpression) left).getReceiverExpression();
++                JetExpression selector = ((JetQualifiedExpression) left).getSelectorExpression();
++                JetType receiverType = bindingContext.get(BindingContext.EXPRESSION_TYPE, receiver);
++                JetType selectorType = bindingContext.get(BindingContext.EXPRESSION_TYPE, selector);
++                if (fromXSD(receiverType)) {
++                    if (selector != null && right != null) {
++                        String action = format("setAttribute(\"{0}\", {1})", selector.getText(), right.getText());
++                        if (isListType(selectorType)) {
++                            action = format("setContent({0})", right.getText());
++                        }
++                        replaces.add(new Pair<JetExpression, JetExpression>(
++                                expression,
++                                createExpression(expression.getProject(), receiver.getText() + QUEST_DOT + action)
++                        ));
++                    }
++                }
++            }
++        }
++        super.visitBinaryExpression(expression);
++    }
++}
+diff --git a/compiler/frontend/src/org/jetbrains/jet/lang/psi/JetPsiFactory.java b/compiler/frontend/src/org/jetbrains/jet/lang/psi/JetPsiFactory.java
+index e01dfda..bba196d 100644
+--- a/compiler/frontend/src/org/jetbrains/jet/lang/psi/JetPsiFactory.java
++++ b/compiler/frontend/src/org/jetbrains/jet/lang/psi/JetPsiFactory.java
+@@ -106,4 +106,9 @@ public class JetPsiFactory {
+         JetClass aClass = createClass(project, "class A()");
+         return aClass.findElementAt(7).getParent();
+     }
++
++    public static JetTypeProjection createTypeProjection(Project project, String type) {
++        JetCallExpression expression = (JetCallExpression) createExpression(project, "Class<" + type + ">");
++        return expression.getTypeArguments().get(0);
++    }
+ }
 diff --git a/idea/idea.iml b/idea/idea.iml
 index 061858a..9feed91 100644
 --- a/idea/idea.iml
@@ -5260,19 +5631,22 @@ index 061858a..9feed91 100644
  </module>
  
 diff --git a/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java b/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
-index 21dea6e..5afb2de 100644
+index 21dea6e..8e42db3 100644
 --- a/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
 +++ b/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
-@@ -14,6 +14,7 @@ import com.intellij.openapi.util.io.FileUtil;
+@@ -12,6 +12,7 @@ import com.intellij.openapi.module.Module;
+ import com.intellij.openapi.util.TextRange;
+ import com.intellij.openapi.util.io.FileUtil;
  import com.intellij.openapi.vfs.VirtualFile;
++import com.intellij.psi.PsiDocumentManager;
  import com.intellij.psi.PsiFile;
  import com.intellij.psi.PsiManager;
-+import com.intellij.psi.impl.DebugUtil;
  import com.intellij.util.Chunk;
- import org.jetbrains.annotations.NotNull;
- import org.jetbrains.jet.codegen.ClassBuilderFactory;
-@@ -28,11 +29,15 @@ import org.jetbrains.jet.lang.resolve.BindingContext;
+@@ -26,10 +27,14 @@ import org.jetbrains.jet.lang.psi.JetFile;
+ import org.jetbrains.jet.lang.psi.JetNamespace;
+ import org.jetbrains.jet.lang.resolve.BindingContext;
  import org.jetbrains.jet.lang.resolve.java.AnalyzerFacade;
++import org.jetbrains.jet.lang.resolve.xsd2k.changers.*;
  import org.jetbrains.jet.plugin.JetFileType;
  
 +import javax.swing.*;
@@ -5283,11 +5657,7 @@ index 21dea6e..5afb2de 100644
  import java.util.List;
  
  import static com.intellij.openapi.compiler.CompilerMessageCategory.ERROR;
-+import static com.intellij.openapi.compiler.CompilerMessageCategory.WARNING;
- 
- /**
-  * @author yole
-@@ -65,41 +70,71 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -65,46 +70,145 @@ public class JetCompiler implements TranslatingCompiler {
              return;
          }
  
@@ -5296,6 +5666,8 @@ index 21dea6e..5afb2de 100644
 +        @SuppressWarnings("unchecked")
 +        final List<JetNamespace>[] namespaces = (List<JetNamespace>[]) Array.newInstance(List.class, 1);
 +        final BindingContext[] bindingContexts = new BindingContext[1];
++
++        final boolean[] errors = {false};
 +
          ApplicationManager.getApplication().runReadAction(new Runnable() {
              @Override
@@ -5309,52 +5681,27 @@ index 21dea6e..5afb2de 100644
 -                    if (psiFile instanceof JetFile) {
 -                        namespaces.add(((JetFile) psiFile).getRootNamespace());
 -                    }
-+                generationState[0] = new GenerationState(compileContext.getProject(), ClassBuilderFactory.BINARIES);
-+                namespaces[0] = createNamespacesCopy(allFiles, compileContext);
-+                bindingContexts[0] = createBindingContext(namespaces[0], compileContext);
-+            }
-+        });
-+
-+        try {
-+            SwingUtilities.invokeAndWait(new Runnable() {
-+                @Override
-+                public void run() {
-+                    ApplicationManager.getApplication().runWriteAction(new Runnable() {
-+                        @Override
-+                        public void run() {
-+                            for (final JetNamespace n : namespaces[0]) {
-+                                n.accept(new XSDChanger(bindingContexts[0]));
-+//                                System.out.println(DebugUtil.psiToString(n, false));
-+                            }
-+                        }
-+                    });
-+
-                 }
-+            });
-+        } catch (InterruptedException e) {
-+            e.printStackTrace();
-+        } catch (InvocationTargetException e) {
-+            e.printStackTrace();
-+        }
- 
+-                }
+-
 -                BindingContext bindingContext =
 -                    AnalyzerFacade.analyzeNamespacesWithJavaIntegration(compileContext.getProject(), namespaces, Predicates.<PsiFile>alwaysTrue(), JetControlFlowDataTraceFactory.EMPTY);
-+        ApplicationManager.getApplication().runReadAction(new Runnable() {
-+            @Override
-+            public void run() {
++                generationState[0] = new GenerationState(compileContext.getProject(), ClassBuilderFactory.BINARIES);
++                namespaces[0] = getNamespaces(allFiles, compileContext);
 +                bindingContexts[0] = createBindingContext(namespaces[0], compileContext);
 +            }
 +        });
  
+-                boolean errors = false;
+-                for (Diagnostic diagnostic : bindingContext.getDiagnostics()) {
 +        ApplicationManager.getApplication().runReadAction(new Runnable() {
 +            @Override
 +            public void run() {
-                 boolean errors = false;
--                for (Diagnostic diagnostic : bindingContext.getDiagnostics()) {
++                bindingContexts[0] = createBindingContext(namespaces[0], compileContext);
 +                for (Diagnostic diagnostic : bindingContexts[0].getDiagnostics()) {
                      switch (diagnostic.getSeverity()) {
                          case ERROR:
-                             errors = true;
+-                            errors = true;
++                            errors[0] = true;
                              report(diagnostic, CompilerMessageCategory.ERROR, compileContext);
                              break;
                          case INFO:
@@ -5368,40 +5715,163 @@ index 21dea6e..5afb2de 100644
                      }
                  }
 -                
-+
-                 if (!errors) {
+-                if (!errors) {
 -                    generationState.compileCorrectNamespaces(bindingContext, namespaces, new CompilationErrorHandler() {
-+                    generationState[0].compileCorrectNamespaces(bindingContexts[0], namespaces[0], new CompilationErrorHandler() {
-                         @Override
-                         public void reportException(Throwable exception, String fileUrl) {
-                             compileContext.addMessage(CompilerMessageCategory.WARNING, exception.getClass().getCanonicalName() + ": " + exception.getMessage(), fileUrl, 0, 0);
-@@ -120,7 +155,7 @@ public class JetCompiler implements TranslatingCompiler {
+-                        @Override
+-                        public void reportException(Throwable exception, String fileUrl) {
+-                            compileContext.addMessage(CompilerMessageCategory.WARNING, exception.getClass().getCanonicalName() + ": " + exception.getMessage(), fileUrl, 0, 0);
++            }
++        });
++
++        if (!errors[0]) {
++            ApplicationManager.getApplication().runReadAction(new Runnable() {
++                @Override
++                public void run() {
++                    namespaces[0] = createNamespacesCopy(allFiles, compileContext);
++                    bindingContexts[0] = createBindingContext(namespaces[0], compileContext);
++                }
++            });
++
++            try {
++                SwingUtilities.invokeAndWait(new Runnable() {
++                    @Override
++                    public void run() {
++                        ApplicationManager.getApplication().runWriteAction(new Runnable() {
++                            @Override
++                            public void run() {
++                                for (final JetNamespace n : namespaces[0]) {
++                                    XsdSetterChanger visitor = new XsdSetterChanger(bindingContexts[0]);
++                                    n.accept(visitor);
++                                    visitor.apply();
++                                }
++                            }
++                        });
++                    }
++                });
++                SwingUtilities.invokeAndWait(new Runnable() {
++                    @Override
++                    public void run() {
++                        ApplicationManager.getApplication().runWriteAction(new Runnable() {
++                            @Override
++                            public void run() {
++                                for (final JetNamespace n : namespaces[0]) {
++                                    n.accept(new XsdGetterChanger(bindingContexts[0]));
++                                }
++                            }
++                        });
++                    }
++                });
++                SwingUtilities.invokeAndWait(new Runnable() {
++                    @Override
++                    public void run() {
++                        ApplicationManager.getApplication().runWriteAction(new Runnable() {
++                            @Override
++                            public void run() {
++                                for (final JetNamespace n : namespaces[0]) {
++                                    n.accept(new XsdGenericChanger(bindingContexts[0]));
++                                }
++                            }
++                        });
++                    }
++                });
++                SwingUtilities.invokeAndWait(new Runnable() {
++                    @Override
++                    public void run() {
++                        ApplicationManager.getApplication().runWriteAction(new Runnable() {
++                            @Override
++                            public void run() {
++                                for (final JetNamespace n : namespaces[0]) {
++                                    n.accept(new XsdConstructorChanger(bindingContexts[0]));
++                                    n.accept(new XsdChangerCommon(bindingContexts[0]));
++                                    if (n.getName() != null && n.getName().equals("xsd_test2")) {
++                                        System.out.println(n.getText());
++//                                        System.out.println(DebugUtil.psiToString(n, false));
++                                    }
++                                }
++                            }
++                        });
++                    }
++                });
++            } catch (InterruptedException e) {
++                e.printStackTrace();
++            } catch (InvocationTargetException e) {
++                e.printStackTrace();
++            }
++
++            ApplicationManager.getApplication().runReadAction(new Runnable() {
++                @Override
++                public void run() {
++                    bindingContexts[0] = createBindingContext(namespaces[0], compileContext);
++                    for (Diagnostic diagnostic : bindingContexts[0].getDiagnostics()) {
++                        switch (diagnostic.getSeverity()) {
++                            case ERROR:
++                                errors[0] = true;
++                                report(diagnostic, CompilerMessageCategory.ERROR, compileContext);
++                                break;
++                            case INFO:
++                                report(diagnostic, CompilerMessageCategory.INFORMATION, compileContext);
++                                break;
++                            case WARNING:
++                                report(diagnostic, CompilerMessageCategory.WARNING, compileContext);
++                                break;
+                         }
+-                    });
++                    }
++
++                    if (!errors[0]) {
++                        generationState[0].compileCorrectNamespaces(bindingContexts[0], namespaces[0], new CompilationErrorHandler() {
++                            @Override
++                            public void reportException(Throwable exception, String fileUrl) {
++                                compileContext.addMessage(CompilerMessageCategory.WARNING, exception.getClass().getCanonicalName() + ": " + exception.getMessage(), fileUrl, 0, 0);
++                            }
++                        });
+ ///////////
+ //                    GenerationState generationState2 = new GenerationState(compileContext.getProject(), ClassBuilderFactory.TEXT);
+ //                    generationState2.compileCorrectNamespaces(bindingContext, namespaces);
+@@ -120,20 +224,21 @@ public class JetCompiler implements TranslatingCompiler {
  ///////////
  
  
 -                    final ClassFileFactory factory = generationState.getFactory();
-+                    final ClassFileFactory factory = generationState[0].getFactory();
-                     List<String> files = factory.files();
-                     for (String file : files) {
-                         File target = new File(outputDir.getPath(), file);
-@@ -133,7 +168,7 @@ public class JetCompiler implements TranslatingCompiler {
+-                    List<String> files = factory.files();
+-                    for (String file : files) {
+-                        File target = new File(outputDir.getPath(), file);
+-                        try {
+-                            FileUtil.writeToFile(target, factory.asBytes(file));
+-                        } catch (IOException e) {
+-                            compileContext.addMessage(ERROR, e.getMessage(), null, 0, 0);
++                        final ClassFileFactory factory = generationState[0].getFactory();
++                        List<String> files = factory.files();
++                        for (String file : files) {
++                            File target = new File(outputDir.getPath(), file);
++                            try {
++                                FileUtil.writeToFile(target, factory.asBytes(file));
++                            } catch (IOException e) {
++                                compileContext.addMessage(ERROR, e.getMessage(), null, 0, 0);
++                            }
+                         }
+                     }
                  }
-             }
-         });
+-            }
+-        });
 -        
++            });
++        }
 +
  //        Map<Module, ModuleCompileState> moduleMap = new HashMap<Module, ModuleCompileState>();
  //
  //        for (VirtualFile virtualFile : virtualFiles) {
-@@ -152,6 +187,21 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -152,10 +257,38 @@ public class JetCompiler implements TranslatingCompiler {
  
      }
  
+-    private void report(Diagnostic diagnostic, CompilerMessageCategory severity, CompileContext compileContext) {
 +    private static BindingContext createBindingContext(List<JetNamespace> namespaces, CompileContext compileContext) {
 +        return AnalyzerFacade.analyzeNamespacesWithJavaIntegration(compileContext.getProject(), namespaces, Predicates.<PsiFile>alwaysTrue(), JetControlFlowDataTraceFactory.EMPTY);
 +    }
 +
-+    private static List<JetNamespace> createNamespacesCopy(VirtualFile[] allFiles, CompileContext compileContext) {
++    @NotNull
++    private static List<JetNamespace> createNamespacesCopy(@NotNull VirtualFile[] allFiles, @NotNull CompileContext compileContext) {
 +        List<JetNamespace> namespaces = Lists.newArrayList();
 +        for (VirtualFile virtualFile : allFiles) {
 +            PsiFile psiFile = PsiManager.getInstance(compileContext.getProject()).findFile(virtualFile);
@@ -5412,169 +5882,47 @@ index 21dea6e..5afb2de 100644
 +        return namespaces;
 +    }
 +
-     private void report(Diagnostic diagnostic, CompilerMessageCategory severity, CompileContext compileContext) {
++    @NotNull
++    private static List<JetNamespace> getNamespaces(@NotNull VirtualFile[] allFiles, @NotNull CompileContext compileContext) {
++        List<JetNamespace> namespaces = Lists.newArrayList();
++        for (VirtualFile virtualFile : allFiles) {
++            PsiFile psiFile = PsiManager.getInstance(compileContext.getProject()).findFile(virtualFile);
++            if (psiFile instanceof JetFile) {
++                namespaces.add(((JetFile) psiFile).getRootNamespace());
++            }
++        }
++        return namespaces;
++    }
++
++    private static void report(Diagnostic diagnostic, CompilerMessageCategory severity, CompileContext compileContext) {
          PsiFile psiFile = diagnostic.getFactory().getPsiFile(diagnostic);
          TextRange textRange = diagnostic.getFactory().getTextRange(diagnostic);
-@@ -168,7 +218,7 @@ public class JetCompiler implements TranslatingCompiler {
+-        Document document = psiFile.getViewProvider().getDocument();
++        final Document document = PsiDocumentManager.getInstance(psiFile.getProject()).getDocument(psiFile.getContainingFile());
+         int line;
+         int col;
+         if (document != null) {
+@@ -167,12 +300,14 @@ public class JetCompiler implements TranslatingCompiler {
+             col = -1;
          }
          VirtualFile virtualFile = psiFile.getVirtualFile();
-         if (virtualFile == null) {
+-        if (virtualFile == null) {
 -            compileContext.addMessage(ERROR, "[Internal Error] No virtual file for PsiFile. Diagnostic: " + diagnostic.getMessage(), "", -1, -1);
-+            compileContext.addMessage(WARNING, "[Internal Error] No virtual file for PsiFile. Diagnostic: " + diagnostic.getMessage(), "", -1, -1);
-         }
-         else {
-             compileContext.addMessage(severity, diagnostic.getMessage(), virtualFile.getUrl(), line + 1, col);
-diff --git a/idea/src/org/jetbrains/jet/plugin/compiler/XSDChanger.java b/idea/src/org/jetbrains/jet/plugin/compiler/XSDChanger.java
-new file mode 100644
-index 0000000..a193d07
---- /dev/null
-+++ b/idea/src/org/jetbrains/jet/plugin/compiler/XSDChanger.java
-@@ -0,0 +1,145 @@
-+package org.jetbrains.jet.plugin.compiler;
-+
-+import com.intellij.openapi.project.Project;
-+import org.jetbrains.annotations.NotNull;
-+import org.jetbrains.jet.lang.descriptors.*;
-+import org.jetbrains.jet.lang.psi.*;
-+import org.jetbrains.jet.lang.resolve.BindingContext;
-+import org.jetbrains.jet.lang.resolve.calls.ResolvedCall;
-+import org.jetbrains.jet.lang.resolve.xsd2k.XSDScope;
-+import org.jetbrains.jet.lang.types.JetType;
-+import org.jetbrains.jet.plugin.quickfix.ImportClassHelper;
-+
-+import java.util.LinkedList;
-+import java.util.List;
-+
-+/**
-+ * @author ignatov
-+ */
-+public class XSDChanger extends JetVisitorVoid {
-+    private BindingContext bindingContext;
-+
-+    public XSDChanger(BindingContext bindingContext) {
-+        this.bindingContext = bindingContext;
-+    }
-+
-+    @Override
-+
-+    public void visitJetElement(JetElement element) {
-+        element.acceptChildren(this);
-+    }
-+
-+    @Override
-+    public void visitNamespace(JetNamespace namespace) {
-+        ImportClassHelper.perform("org.jdom.Element", namespace);
-+        namespace.acceptChildren(this);
-+    }
-+
-+    @Override
-+    public void visitNamedFunction(JetNamedFunction function) {
-+        final Project project = function.getProject();
-+
-+        for (final JetParameter p : function.getValueParameters()) {
-+            JetType t = bindingContext.get(BindingContext.TYPE, p.getTypeReference());
-+
-+            if (t != null && fromXSD(t.getConstructor().getDeclarationDescriptor())) {
-+                p.replace(JetPsiFactory.createParameter(project, p.getName(), "Element?"));
-+            }
-+        }
-+        super.visitNamedFunction(function);
-+    }
-+
-+    private static boolean fromXSD(DeclarationDescriptor declarationDescriptor) {
-+        declarationDescriptor = getTopContainerDeclaration(declarationDescriptor);
-+        return declarationDescriptor != null &&
-+               XSDScope.isImported(declarationDescriptor.getName());
-+    }
-+
-+    private static DeclarationDescriptor getTopContainerDeclaration(DeclarationDescriptor declarationDescriptor) {
-+        while (declarationDescriptor != null) {
-+            DeclarationDescriptor containingDeclaration = declarationDescriptor.getContainingDeclaration();
-+            if (containingDeclaration == null)
-+                return declarationDescriptor;
-+            declarationDescriptor = containingDeclaration;
-+        }
-+        return declarationDescriptor;
-+    }
-+
-+    @Override
-+    public void visitCallExpression(JetCallExpression expression) {
-+        if (isConstructorInvocation(expression)) {
-+            JetExpression calleeExpression = expression.getCalleeExpression();
-+            if (calleeExpression != null && calleeExpression instanceof JetReferenceExpression) {
-+                DeclarationDescriptor declarationDescriptor = bindingContext.get(BindingContext.REFERENCE_TARGET, (JetReferenceExpression) calleeExpression);
-+                if (fromXSD(declarationDescriptor)) {
-+                    List<String> names = new LinkedList<String>();
-+                    List<String> values = new LinkedList<String>();
-+                    if (declarationDescriptor instanceof ConstructorDescriptor) {
-+                        for (ValueParameterDescriptor p :((ConstructorDescriptor) declarationDescriptor).getValueParameters())
-+                            names.add(p.getName());
-+                    }
-+                    List<? extends ValueArgument> valueArguments = expression.getValueArguments();
-+                    for (ValueArgument va : valueArguments) {
-+                        JetExpression argumentExpression = va.getArgumentExpression();
-+                        if (argumentExpression != null) {
-+                            values.add(argumentExpression.getText());
-+                        }
-+
-+                    }
-+                    String text = "Element(\"" + calleeExpression.getText() + "\")" + createChainOfSetAttribute(names, values);
-+//                    System.out.println(text);
-+                    expression.replace(JetPsiFactory.createExpression(expression.getProject(), text));
-+                }
-+            }
-+        }
-+        super.visitCallExpression(expression);
-+    }
-+
-+    @NotNull
-+    private static String createChainOfSetAttribute(@NotNull List<String> names, @NotNull List<String> values) {
-+        List<String> result = new LinkedList<String>();
-+        if (names.size() == values.size()) {
-+            int size = names.size();
-+            for (int i = 0; i < size; i++)
-+                result.add("setAttribute" + "(\"" + names.get(i) + "\"," + " " + quoteIfNeeded(values.get(i)) + ")" );
-+            return "." + join(result, "?.");
-+        }
-+        return "";
-+    }
-+
-+    private static String quoteIfNeeded(String string) {
-+        if (string.startsWith("\"") && string.startsWith("\""))
-+            return string;
-+        return "\"" + string + "\"";
-+    }
-+
-+    private static String join(final String[] array, final String delimiter) {
-+        StringBuilder buffer = new StringBuilder();
-+        boolean haveDelimiter = (delimiter != null);
-+
-+        for (int i = 0; i < array.length; i++) {
-+            buffer.append(array[i]);
-+
-+            if (haveDelimiter && (i + 1) < array.length) {
-+                buffer.append(delimiter);
-+            }
-+        }
-+
-+        return buffer.toString();
-+    }
-+
-+    public static String join(final List<String> array, final String delimiter) {
-+        return join(array.toArray(new String[array.size()]), delimiter);
-+    }
-+
-+    private boolean isConstructorInvocation(@NotNull JetCallExpression expression) {
-+        JetExpression calleeExpression = expression.getCalleeExpression();
-+        assert calleeExpression != null : "JetCallExpression should have not null callee";
-+        ResolvedCall<?> resolvedCall = bindingContext.get(BindingContext.RESOLVED_CALL, calleeExpression);
-+        if (resolvedCall == null) {
-+            return false;
-+        }
-+        CallableDescriptor descriptor = resolvedCall.getCandidateDescriptor();
-+        return (descriptor instanceof ConstructorDescriptor);
-+    }
-+}
+-        }
+-        else {
+-            compileContext.addMessage(severity, diagnostic.getMessage(), virtualFile.getUrl(), line + 1, col);
+-        }
++//        if (virtualFile == null) {
++//            compileContext.addMessage(WARNING, "[Internal Error] No virtual file for PsiFile. Diagnostic: " + diagnostic.getMessage(), "", -1, -1);
++//        }
++//        else {
++        compileContext.addMessage(severity, diagnostic.getMessage(), virtualFile == null
++                                                                     ? "Synthetic file"
++                                                                     : virtualFile.getUrl(), line + 1, col);
++//        }
+     }
+ 
+ //    private static class ModuleCompileState {
 diff --git a/lib/xsom-20081112.jar b/lib/xsom-20081112.jar
 new file mode 100644
 index 0000000000000000000000000000000000000000..fa1a590530d0f76014cee220e4fdd0975467e12d
