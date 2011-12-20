@@ -1,5 +1,5 @@
 diff --git a/.idea/modules.xml b/.idea/modules.xml
-index 463eb8b..96c28f6 100644
+index 9c559c5..15f11ba 100644
 --- a/.idea/modules.xml
 +++ b/.idea/modules.xml
 @@ -9,6 +9,7 @@
@@ -11,20 +11,21 @@ index 463eb8b..96c28f6 100644
        <module fileurl="file://$PROJECT_DIR$/idea/idea.iml" filepath="$PROJECT_DIR$/idea/idea.iml" />
        <module fileurl="file://$PROJECT_DIR$/stdlib/stdlib.iml" filepath="$PROJECT_DIR$/stdlib/stdlib.iml" />
 diff --git a/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java b/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java
-index da88942..85cde77 100644
+index 8dafa6b..cdd4913 100644
 --- a/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java
 +++ b/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java
-@@ -794,7 +794,7 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> {
+@@ -805,7 +805,8 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> {
      }
  
      private void markLineNumber(JetElement statement) {
 -        final Document document = statement.getContainingFile().getViewProvider().getDocument();
 +        final Document document = PsiDocumentManager.getInstance(state.getProject()).getDocument(statement.getContainingFile());
++//        final Document document = statement.getContainingFile().getViewProvider().getDocument();
          if (document != null) {
              int lineNumber = document.getLineNumber(statement.getTextRange().getStartOffset());  // 0-based
              if (lineNumber == myLastLineNumber) {
 diff --git a/compiler/backend/src/org/jetbrains/jet/codegen/GenerationState.java b/compiler/backend/src/org/jetbrains/jet/codegen/GenerationState.java
-index 461c528..30da023 100644
+index 461c528..3077e70 100644
 --- a/compiler/backend/src/org/jetbrains/jet/codegen/GenerationState.java
 +++ b/compiler/backend/src/org/jetbrains/jet/codegen/GenerationState.java
 @@ -6,6 +6,7 @@ package org.jetbrains.jet.codegen;
@@ -35,11 +36,12 @@ index 461c528..30da023 100644
  import com.intellij.util.containers.Stack;
  import org.jetbrains.jet.codegen.intrinsics.IntrinsicMethods;
  import org.jetbrains.jet.lang.cfg.pseudocode.JetControlFlowDataTraceFactory;
-@@ -115,7 +116,8 @@ public class GenerationState {
+@@ -115,7 +116,9 @@ public class GenerationState {
                      generateNamespace(namespace);
                  }
                  catch (Throwable e) {
 -                    errorHandler.reportException(e, namespace.getContainingFile().getVirtualFile().getUrl());
++//                    errorHandler.reportException(e, namespace.getContainingFile().getVirtualFile().getUrl());
 +                    VirtualFile virtualFile = namespace.getContainingFile().getVirtualFile();
 +                    errorHandler.reportException(e, virtualFile == null ? "synthetic" : virtualFile.getUrl());
                      DiagnosticUtils.throwIfRunningOnServer(e);
@@ -57,52 +59,117 @@ index 5102197..f5aa63f 100644
    </component>
  </module>
  
+diff --git a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java
+index c7501b8..db09095 100644
+--- a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java
++++ b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java
+@@ -83,9 +83,13 @@ public class AnalyzerFacade {
+     public static BindingContext analyzeNamespacesWithJavaIntegration(Project project, Collection<? extends JetDeclaration> declarations, Predicate<PsiFile> filesToAnalyzeCompletely, JetControlFlowDataTraceFactory flowDataTraceFactory) {
+         BindingTraceContext bindingTraceContext = new BindingTraceContext();
+         JetSemanticServices semanticServices = JetSemanticServices.createSemanticServices(project);
++        JavaSemanticServices javaSemanticServices = new JavaSemanticServices(project, JetSemanticServices.createSemanticServices(project), bindingTraceContext);
+         return AnalyzingUtils.analyzeNamespacesWithGivenTrace(
+                 project,
+-                JavaBridgeConfiguration.createJavaBridgeConfiguration(project, bindingTraceContext, StandardConfiguration.createStandardConfiguration(project, semanticServices)),
++                XsdBridgeConfiguration.createXsdBridgeConfiguration(
++                        project,
++                        JavaBridgeConfiguration.createJavaBridgeConfiguration(StandardConfiguration.createStandardConfiguration(project, semanticServices), javaSemanticServices),
++                        javaSemanticServices),
+                 declarations,
+                 filesToAnalyzeCompletely,
+                 flowDataTraceFactory,
 diff --git a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/JavaBridgeConfiguration.java b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/JavaBridgeConfiguration.java
-index d2dc2bd..7f2f2fb 100644
+index d2dc2bd..5835234 100644
 --- a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/JavaBridgeConfiguration.java
 +++ b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/JavaBridgeConfiguration.java
-@@ -8,6 +8,7 @@ import org.jetbrains.jet.lang.descriptors.NamespaceDescriptor;
+@@ -1,9 +1,7 @@
+ package org.jetbrains.jet.lang.resolve.java;
+ 
+-import com.intellij.openapi.project.Project;
+ import org.jetbrains.annotations.NotNull;
+ import org.jetbrains.jet.lang.Configuration;
+-import org.jetbrains.jet.lang.JetSemanticServices;
+ import org.jetbrains.jet.lang.descriptors.NamespaceDescriptor;
  import org.jetbrains.jet.lang.resolve.BindingTrace;
  import org.jetbrains.jet.lang.resolve.DescriptorUtils;
- import org.jetbrains.jet.lang.resolve.scopes.WritableScope;
-+import org.jetbrains.jet.lang.resolve.xsd2k.XsdScope;
- 
- /**
-  * @author abreslav
-@@ -15,11 +16,13 @@ import org.jetbrains.jet.lang.resolve.scopes.WritableScope;
+@@ -14,15 +12,15 @@ import org.jetbrains.jet.lang.resolve.scopes.WritableScope;
+  */
  public class JavaBridgeConfiguration implements Configuration {
  
-     public static Configuration createJavaBridgeConfiguration(@NotNull Project project, @NotNull BindingTrace trace, Configuration delegateConfiguration) {
-+        JavaBridgeConfiguration.project = project;
-         return new JavaBridgeConfiguration(project, trace, delegateConfiguration);
+-    public static Configuration createJavaBridgeConfiguration(@NotNull Project project, @NotNull BindingTrace trace, Configuration delegateConfiguration) {
+-        return new JavaBridgeConfiguration(project, trace, delegateConfiguration);
++    public static Configuration createJavaBridgeConfiguration(Configuration delegateConfiguration, JavaSemanticServices semanticServices) {
++        return new JavaBridgeConfiguration(delegateConfiguration, semanticServices);
      }
  
      private final JavaSemanticServices javaSemanticServices;
      private final Configuration delegateConfiguration;
-+    private static Project project;
  
-     private JavaBridgeConfiguration(Project project, BindingTrace trace, Configuration delegateConfiguration) {
-         this.javaSemanticServices = new JavaSemanticServices(project, JetSemanticServices.createSemanticServices(project), trace);
-@@ -28,8 +31,12 @@ public class JavaBridgeConfiguration implements Configuration {
- 
-     @Override
-     public void addDefaultImports(@NotNull BindingTrace trace, @NotNull WritableScope rootScope) {
--        rootScope.importScope(new JavaPackageScope("", null, javaSemanticServices));
-+        final JavaPackageScope javaPackageScope = new JavaPackageScope("", null, javaSemanticServices);
-+        rootScope.importScope(javaPackageScope);
-         rootScope.importScope(new JavaPackageScope("java.lang", null, javaSemanticServices));
-+        rootScope.importScope(new XsdScope(project, trace, javaPackageScope, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/maven.xsd", "jet.xsd.maven").getScope());
-+        rootScope.importScope(new XsdScope(project, trace, javaPackageScope, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/shiporder.xsd", "jet.xsd.shiporder").getScope());
-+        rootScope.importScope(new XsdScope(project, trace, javaPackageScope, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/facebook.xsd", "jet.xsd.facebook").getScope());
-         delegateConfiguration.addDefaultImports(trace, rootScope);
+-    private JavaBridgeConfiguration(Project project, BindingTrace trace, Configuration delegateConfiguration) {
+-        this.javaSemanticServices = new JavaSemanticServices(project, JetSemanticServices.createSemanticServices(project), trace);
++    private JavaBridgeConfiguration(Configuration delegateConfiguration, JavaSemanticServices semanticServices) {
++        this.javaSemanticServices = semanticServices;
+         this.delegateConfiguration = delegateConfiguration;
      }
  
+diff --git a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/XsdBridgeConfiguration.java b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/XsdBridgeConfiguration.java
+new file mode 100644
+index 0000000..bac0e73
+--- /dev/null
++++ b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/XsdBridgeConfiguration.java
+@@ -0,0 +1,46 @@
++package org.jetbrains.jet.lang.resolve.java;
++
++import com.intellij.openapi.project.Project;
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.jet.lang.Configuration;
++import org.jetbrains.jet.lang.JetSemanticServices;
++import org.jetbrains.jet.lang.descriptors.NamespaceDescriptor;
++import org.jetbrains.jet.lang.resolve.BindingTrace;
++import org.jetbrains.jet.lang.resolve.DescriptorUtils;
++import org.jetbrains.jet.lang.resolve.scopes.WritableScope;
++import org.jetbrains.jet.lang.resolve.xsd2k.XsdScope;
++
++/**
++ * @author abreslav
++ */
++public class XsdBridgeConfiguration implements Configuration {
++
++    private static Project project;
++
++    public static Configuration createXsdBridgeConfiguration(@NotNull Project project, Configuration delegateConfiguration, JavaSemanticServices javaSemanticServices) {
++        XsdBridgeConfiguration.project = project;
++        return new XsdBridgeConfiguration(delegateConfiguration, javaSemanticServices);
++    }
++
++    private final JavaSemanticServices javaSemanticServices;
++    private final Configuration delegateConfiguration;
++
++    private XsdBridgeConfiguration(Configuration delegateConfiguration, JavaSemanticServices javaSemanticServices) {
++        this.delegateConfiguration = delegateConfiguration;
++        this.javaSemanticServices = javaSemanticServices;
++    }
++
++    @Override
++    public void addDefaultImports(@NotNull BindingTrace trace, @NotNull WritableScope rootScope) {
++//                rootScope.importScope(new XsdScope(project, trace, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/maven.xsd", "jet.xsd.maven").getScope());
++//                rootScope.importScope(new XsdScope(project, trace, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/facebook.xsd", "jet.xsd.facebook").getScope());
++        rootScope.importScope(XsdScope.createOrGetXsdScope(project, trace, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/shiporder.xsd", "jet.xsd.shiporder", javaSemanticServices));
++        delegateConfiguration.addDefaultImports(trace, rootScope);
++    }
++
++    @Override
++    public void extendNamespaceScope(@NotNull BindingTrace trace, @NotNull NamespaceDescriptor namespaceDescriptor, @NotNull WritableScope namespaceMemberScope) {
++        namespaceMemberScope.importScope(new JavaPackageScope(DescriptorUtils.getFQName(namespaceDescriptor), namespaceDescriptor, javaSemanticServices));
++        delegateConfiguration.extendNamespaceScope(trace, namespaceDescriptor, namespaceMemberScope);
++    }
++}
 diff --git a/compiler/frontend.xsd/frontend.xsd.iml b/compiler/frontend.xsd/frontend.xsd.iml
 new file mode 100644
-index 0000000..e90ce4e
+index 0000000..5e97eab
 --- /dev/null
 +++ b/compiler/frontend.xsd/frontend.xsd.iml
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,23 @@
 +<?xml version="1.0" encoding="UTF-8"?>
 +<module type="JAVA_MODULE" version="4">
 +  <component name="NewModuleRootManager" inherit-compiler-output="true">
@@ -122,6 +189,7 @@ index 0000000..e90ce4e
 +      </library>
 +    </orderEntry>
 +    <orderEntry type="module" module-name="frontend" />
++    <orderEntry type="module" module-name="frontend.java" />
 +  </component>
 +</module>
 +
@@ -4891,7 +4959,7 @@ index 0000000..4212d37
 \ No newline at end of file
 diff --git a/compiler/frontend.xsd/src/jet/xsd/shiporder.xsd b/compiler/frontend.xsd/src/jet/xsd/shiporder.xsd
 new file mode 100644
-index 0000000..1c90669
+index 0000000..5a45c45
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/jet/xsd/shiporder.xsd
 @@ -0,0 +1,42 @@
@@ -4924,14 +4992,14 @@ index 0000000..1c90669
 +                    </xs:complexType>
 +                </xs:element>
 +
-+                <xs:element name="datetime">
-+                    <xs:complexType>
-+                        <xs:sequence>
-+                            <xs:element name="Date" type="xs:date"/>
-+                            <xs:element name="Time" type="xs:time"/>
-+                        </xs:sequence>
-+                    </xs:complexType>
-+                </xs:element>
++                <!--<xs:element name="datetime">-->
++                    <!--<xs:complexType>-->
++                        <!--<xs:sequence>-->
++                            <!--<xs:element name="Date" type="xs:date"/>-->
++                            <!--<xs:element name="Time" type="xs:time"/>-->
++                        <!--</xs:sequence>-->
++                    <!--</xs:complexType>-->
++                <!--</xs:element>-->
 +            </xs:sequence>
 +            <xs:attribute name="orderid" type="xs:string" use="required"/>
 +        </xs:complexType>
@@ -4983,30 +5051,34 @@ index 0000000..15f2c7f
 \ No newline at end of file
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdScope.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdScope.java
 new file mode 100644
-index 0000000..0cfe196
+index 0000000..19578fc
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdScope.java
-@@ -0,0 +1,68 @@
+@@ -0,0 +1,72 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k;
 +
++import com.google.common.base.Predicates;
 +import com.intellij.openapi.project.Project;
++import com.intellij.openapi.util.io.FileUtil;
++import com.intellij.psi.PsiFile;
 +import com.intellij.psi.PsiFileFactory;
 +import org.jetbrains.annotations.NotNull;
 +import org.jetbrains.jet.lang.JetSemanticServices;
++import org.jetbrains.jet.lang.StandardConfiguration;
++import org.jetbrains.jet.lang.cfg.pseudocode.JetControlFlowDataTraceFactory;
++import org.jetbrains.jet.lang.descriptors.NamespaceDescriptor;
 +import org.jetbrains.jet.lang.descriptors.NamespaceDescriptorImpl;
-+import org.jetbrains.jet.lang.descriptors.annotations.AnnotationDescriptor;
 +import org.jetbrains.jet.lang.psi.JetFile;
 +import org.jetbrains.jet.lang.resolve.AnalyzingUtils;
++import org.jetbrains.jet.lang.resolve.BindingContext;
 +import org.jetbrains.jet.lang.resolve.BindingTrace;
-+import org.jetbrains.jet.lang.resolve.TopDownAnalyzer;
++import org.jetbrains.jet.lang.resolve.java.JavaBridgeConfiguration;
++import org.jetbrains.jet.lang.resolve.java.JavaSemanticServices;
 +import org.jetbrains.jet.lang.resolve.scopes.JetScope;
-+import org.jetbrains.jet.lang.resolve.scopes.RedeclarationHandler;
-+import org.jetbrains.jet.lang.resolve.scopes.WritableScope;
-+import org.jetbrains.jet.lang.resolve.scopes.WritableScopeImpl;
-+import org.jetbrains.jet.lang.types.JetStandardLibrary;
 +import org.jetbrains.jet.plugin.JetFileType;
 +
 +import java.io.File;
++import java.io.IOException;
 +import java.util.Collections;
 +import java.util.HashMap;
 +
@@ -5014,53 +5086,53 @@ index 0000000..0cfe196
 + * @author ignatov
 + */
 +public class XsdScope {
-+    static HashMap<String, NamespaceDescriptorImpl> importedNamespaces = new HashMap<String, NamespaceDescriptorImpl>();
-+    NamespaceDescriptorImpl namespaceDescriptor;
++    private static HashMap<String, String> importedNamespacesText = new HashMap<String, String>();
 +
-+    public static boolean isImported(String namespaceName) {
-+        return importedNamespaces.containsKey(namespaceName);
-+    }
-+
-+    public XsdScope(@NotNull Project project, BindingTrace trace, JetScope javaPackageScope, String xsdFileName, String namespaceName) {
-+        if (!importedNamespaces.containsKey(namespaceName)) {
-+
-+            String stream = XsdParser.parse(new File(xsdFileName), namespaceName);
-+            namespaceDescriptor = new NamespaceDescriptorImpl(null, Collections.<AnnotationDescriptor>emptyList(), namespaceName);
-+
-+            JetFile file = (JetFile) PsiFileFactory.getInstance(project).createFileFromText("empty.jet", JetFileType.INSTANCE, stream);
-+            JetSemanticServices bootstrappingSemanticServices = JetSemanticServices.createSemanticServices(project);
-+
-+            WritableScope writableScope = new WritableScopeImpl(JetScope.EMPTY, namespaceDescriptor, RedeclarationHandler.DO_NOTHING).setDebugName("JetMaven.STANDARD_CLASSES");
-+            writableScope.importScope(JetStandardLibrary.getJetStandardLibrary(project).getLibraryScope());
-+            writableScope.importScope(javaPackageScope);
-+            writableScope.changeLockLevel(WritableScope.LockLevel.BOTH);
-+
-+            namespaceDescriptor.initialize(writableScope);
-+
-+            TopDownAnalyzer.processStandardLibraryNamespace(bootstrappingSemanticServices,
-+                                                            trace,
-+                                                            writableScope,
-+                                                            namespaceDescriptor,
-+                                                            file.getRootNamespace());
-+
-+            AnalyzingUtils.throwExceptionOnErrors(trace.getBindingContext());
-+            importedNamespaces.put(namespaceName, namespaceDescriptor);
++    public static JetScope createOrGetXsdScope(@NotNull Project project, BindingTrace trace, String xsdFileName, String namespaceName, JavaSemanticServices javaSemanticServices) {
++        String text;
++        if (!importedNamespacesText.containsKey(namespaceName)) {
++            text = XsdParser.parse(new File(xsdFileName), namespaceName);
++            importedNamespacesText.put(namespaceName, text);
 +        }
 +        else {
-+            namespaceDescriptor = importedNamespaces.get(namespaceName);
++            text = importedNamespacesText.get(namespaceName);
 +        }
++        JetFile file = (JetFile) PsiFileFactory.getInstance(project).createFileFromText("empty.jet", JetFileType.INSTANCE, text);
++
++        try {
++            FileUtil.writeToFile(new File("/home/ignatov/downloads/" + namespaceName + ".kt"), file.getText());
++        } catch (IOException e) {
++            e.printStackTrace();
++        }
++        AnalyzingUtils.checkForSyntacticErrors(file);
++        JetSemanticServices bootstrappingSemanticServices = JetSemanticServices.createSemanticServices(project);
++
++        BindingContext bindingContext = AnalyzingUtils.analyzeNamespaces(
++                project,
++                JavaBridgeConfiguration.createJavaBridgeConfiguration(StandardConfiguration.createStandardConfiguration(project, bootstrappingSemanticServices), javaSemanticServices),
++                Collections.singleton(file.getRootNamespace()),
++                Predicates.<PsiFile>alwaysFalse(),
++                JetControlFlowDataTraceFactory.EMPTY,
++                bootstrappingSemanticServices);
++
++        NamespaceDescriptor namespaceDescriptor;
++        namespaceDescriptor = (NamespaceDescriptorImpl) bindingContext.get(BindingContext.DECLARATION_TO_DESCRIPTOR, file.getRootNamespace());
++
++        AnalyzingUtils.throwExceptionOnErrors(trace.getBindingContext());
++
++        return namespaceDescriptor.getMemberScope();
 +    }
 +
-+    public JetScope getScope() {
-+        return namespaceDescriptor.getMemberScope();
++    public static boolean isImported(String namespaceName) {
++        return importedNamespacesText.containsKey(namespaceName);
 +    }
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java
 new file mode 100644
-index 0000000..9297473
+index 0000000..fa8f649
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java
-@@ -0,0 +1,196 @@
+@@ -0,0 +1,198 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k;
 +
 +import com.sun.xml.xsom.*;
@@ -5107,11 +5179,13 @@ index 0000000..9297473
 +
 +    private void initializeTypeMap() {
 +        typeMap.put("string", "String");
-+        typeMap.put("integer", "BigInteger");
++//        typeMap.put("integer", "BigInteger");
++        typeMap.put("integer", "Int");
 +        typeMap.put("int", "Int");
 +        typeMap.put("long", "Long");
 +        typeMap.put("short", "Short");
-+        typeMap.put("decimal", "BigDecimal");
++//        typeMap.put("decimal", "BigDecimal");
++        typeMap.put("decimal", "Double");
 +        typeMap.put("float", "Float");
 +        typeMap.put("double", "Double");
 +        typeMap.put("boolean", "Boolean");
@@ -5259,15 +5333,17 @@ index 0000000..9297473
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdChangerCommon.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdChangerCommon.java
 new file mode 100644
-index 0000000..45f2309
+index 0000000..b124c1d
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdChangerCommon.java
 @@ -0,0 +1,91 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k.changers;
 +
 +import com.intellij.openapi.project.Project;
++import org.jetbrains.annotations.NotNull;
 +import org.jetbrains.annotations.Nullable;
 +import org.jetbrains.jet.lang.descriptors.DeclarationDescriptor;
++import org.jetbrains.jet.lang.descriptors.NamespaceDescriptor;
 +import org.jetbrains.jet.lang.psi.*;
 +import org.jetbrains.jet.lang.resolve.BindingContext;
 +import org.jetbrains.jet.lang.resolve.xsd2k.XsdScope;
@@ -5324,7 +5400,7 @@ index 0000000..45f2309
 +    static boolean fromXSD(@Nullable JetType type) {
 +        if (type != null) {
 +            try {
-+                return fromXSD(getTopContainerDeclaration(type.getConstructor().getDeclarationDescriptor()));
++                return fromXSD(getContainingNamespaceName(type.getConstructor().getDeclarationDescriptor()));
 +            } catch (UnsupportedOperationException ignored) {
 +                return false;
 +            }
@@ -5332,15 +5408,15 @@ index 0000000..45f2309
 +        return false;
 +    }
 +
-+    private static DeclarationDescriptor getTopContainerDeclaration(DeclarationDescriptor declarationDescriptor) {
++    static String getContainingNamespaceName(DeclarationDescriptor declarationDescriptor) {
++        String namespaceName = "";
 +        while (declarationDescriptor != null) {
-+            DeclarationDescriptor containingDeclaration = declarationDescriptor.getContainingDeclaration();
-+            if (containingDeclaration == null) {
-+                return declarationDescriptor;
++            if (declarationDescriptor instanceof NamespaceDescriptor) {
++                namespaceName = namespaceName.isEmpty() ? declarationDescriptor.getName() : declarationDescriptor.getName() + "." + namespaceName;
 +            }
-+            declarationDescriptor = containingDeclaration;
++            declarationDescriptor = declarationDescriptor.getContainingDeclaration();
 +        }
-+        return declarationDescriptor;
++        return namespaceName;
 +    }
 +
 +    @Override
@@ -5348,15 +5424,13 @@ index 0000000..45f2309
 +        super.visitReferenceExpression(expression);
 +    }
 +
-+    static boolean fromXSD(DeclarationDescriptor declarationDescriptor) {
-+        declarationDescriptor = getTopContainerDeclaration(declarationDescriptor);
-+        return declarationDescriptor != null &&
-+               XsdScope.isImported(declarationDescriptor.getName());
++    static boolean fromXSD(@NotNull String namespaceName) {
++        return XsdScope.isImported(namespaceName);
 +    }
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java
 new file mode 100644
-index 0000000..2f1a9b6
+index 0000000..b5d9675
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java
 @@ -0,0 +1,105 @@
@@ -5388,7 +5462,7 @@ index 0000000..2f1a9b6
 +            JetExpression calleeExpression = expression.getCalleeExpression();
 +            if (calleeExpression != null && calleeExpression instanceof JetReferenceExpression) {
 +                DeclarationDescriptor declarationDescriptor = bindingContext.get(BindingContext.REFERENCE_TARGET, (JetReferenceExpression) calleeExpression);
-+                if (fromXSD(declarationDescriptor)) {
++                if (fromXSD(getContainingNamespaceName(declarationDescriptor))) {
 +                    return true;
 +                }
 +            }
@@ -5631,7 +5705,7 @@ index 061858a..9feed91 100644
  </module>
  
 diff --git a/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java b/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
-index 21dea6e..8e42db3 100644
+index 766868d..1e87305 100644
 --- a/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
 +++ b/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
 @@ -12,6 +12,7 @@ import com.intellij.openapi.module.Module;
@@ -5642,7 +5716,7 @@ index 21dea6e..8e42db3 100644
  import com.intellij.psi.PsiFile;
  import com.intellij.psi.PsiManager;
  import com.intellij.util.Chunk;
-@@ -26,10 +27,14 @@ import org.jetbrains.jet.lang.psi.JetFile;
+@@ -23,10 +24,14 @@ import org.jetbrains.jet.lang.psi.JetFile;
  import org.jetbrains.jet.lang.psi.JetNamespace;
  import org.jetbrains.jet.lang.resolve.BindingContext;
  import org.jetbrains.jet.lang.resolve.java.AnalyzerFacade;
@@ -5657,7 +5731,7 @@ index 21dea6e..8e42db3 100644
  import java.util.List;
  
  import static com.intellij.openapi.compiler.CompilerMessageCategory.ERROR;
-@@ -65,46 +70,145 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -62,51 +67,151 @@ public class JetCompiler implements TranslatingCompiler {
              return;
          }
  
@@ -5719,7 +5793,8 @@ index 21dea6e..8e42db3 100644
 -                    generationState.compileCorrectNamespaces(bindingContext, namespaces, new CompilationErrorHandler() {
 -                        @Override
 -                        public void reportException(Throwable exception, String fileUrl) {
--                            compileContext.addMessage(CompilerMessageCategory.WARNING, exception.getClass().getCanonicalName() + ": " + exception.getMessage(), fileUrl, 0, 0);
+-                            if(exception instanceof CompilationException) {
+-                                report((CompilationException) exception, compileContext);
 +            }
 +        });
 +
@@ -5770,7 +5845,9 @@ index 21dea6e..8e42db3 100644
 +                                for (final JetNamespace n : namespaces[0]) {
 +                                    n.accept(new XsdGenericChanger(bindingContexts[0]));
 +                                }
-+                            }
+                             }
+-                            else {
+-                                compileContext.addMessage(CompilerMessageCategory.ERROR, exception.getClass().getCanonicalName() + ": " + exception.getMessage(), fileUrl, 0, 0);
 +                        });
 +                    }
 +                });
@@ -5788,7 +5865,7 @@ index 21dea6e..8e42db3 100644
 +//                                        System.out.println(DebugUtil.psiToString(n, false));
 +                                    }
 +                                }
-+                            }
+                             }
 +                        });
 +                    }
 +                });
@@ -5823,12 +5900,18 @@ index 21dea6e..8e42db3 100644
 +                            @Override
 +                            public void reportException(Throwable exception, String fileUrl) {
 +                                compileContext.addMessage(CompilerMessageCategory.WARNING, exception.getClass().getCanonicalName() + ": " + exception.getMessage(), fileUrl, 0, 0);
++                                if (exception instanceof CompilationException) {
++                                    report((CompilationException) exception, compileContext);
++                                }
++                                else {
++                                    compileContext.addMessage(CompilerMessageCategory.ERROR, exception.getClass().getCanonicalName() + ": " + exception.getMessage(), fileUrl, 0, 0);
++                                }
 +                            }
 +                        });
  ///////////
  //                    GenerationState generationState2 = new GenerationState(compileContext.getProject(), ClassBuilderFactory.TEXT);
  //                    generationState2.compileCorrectNamespaces(bindingContext, namespaces);
-@@ -120,20 +224,21 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -122,20 +227,21 @@ public class JetCompiler implements TranslatingCompiler {
  ///////////
  
  
@@ -5861,7 +5944,7 @@ index 21dea6e..8e42db3 100644
  //        Map<Module, ModuleCompileState> moduleMap = new HashMap<Module, ModuleCompileState>();
  //
  //        for (VirtualFile virtualFile : virtualFiles) {
-@@ -152,10 +257,38 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -154,10 +260,38 @@ public class JetCompiler implements TranslatingCompiler {
  
      }
  
@@ -5902,7 +5985,7 @@ index 21dea6e..8e42db3 100644
          int line;
          int col;
          if (document != null) {
-@@ -167,12 +300,14 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -169,18 +303,15 @@ public class JetCompiler implements TranslatingCompiler {
              col = -1;
          }
          VirtualFile virtualFile = psiFile.getVirtualFile();
@@ -5912,14 +5995,33 @@ index 21dea6e..8e42db3 100644
 -        else {
 -            compileContext.addMessage(severity, diagnostic.getMessage(), virtualFile.getUrl(), line + 1, col);
 -        }
-+//        if (virtualFile == null) {
-+//            compileContext.addMessage(WARNING, "[Internal Error] No virtual file for PsiFile. Diagnostic: " + diagnostic.getMessage(), "", -1, -1);
-+//        }
-+//        else {
 +        compileContext.addMessage(severity, diagnostic.getMessage(), virtualFile == null
 +                                                                     ? "Synthetic file"
 +                                                                     : virtualFile.getUrl(), line + 1, col);
-+//        }
+     }
+ 
+-    private void report(CompilationException diagnostic, CompileContext compileContext) {
++    private static void report(CompilationException diagnostic, CompileContext compileContext) {
+         PsiFile psiFile = diagnostic.getElement().getContainingFile();
+         TextRange textRange = diagnostic.getElement().getTextRange();
+-        Document document = psiFile.getViewProvider().getDocument();
++        final Document document = PsiDocumentManager.getInstance(psiFile.getProject()).getDocument(psiFile.getContainingFile());
+         int line;
+         int col;
+         if (document != null) {
+@@ -192,12 +323,9 @@ public class JetCompiler implements TranslatingCompiler {
+             col = -1;
+         }
+         VirtualFile virtualFile = psiFile.getVirtualFile();
+-        if (virtualFile == null) {
+-            compileContext.addMessage(ERROR, "[Internal Error] No virtual file for PsiFile. Diagnostic: " + diagnostic.getMessage(), "", -1, -1);
+-        }
+-        else {
+-            compileContext.addMessage(ERROR, diagnostic.getMessage(), virtualFile.getUrl(), line + 1, col);
+-        }
++        compileContext.addMessage(ERROR, diagnostic.getMessage(), virtualFile == null
++                                                                  ? "Synthetic file"
++                                                                  : virtualFile.getUrl(), line + 1, col);
      }
  
  //    private static class ModuleCompileState {
