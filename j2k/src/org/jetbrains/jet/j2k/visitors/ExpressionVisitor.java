@@ -10,6 +10,7 @@ import java.util.Collections;
 import java.util.List;
 
 import static org.jetbrains.jet.j2k.Converter.*;
+import static org.jetbrains.jet.j2k.visitors.TypeVisitor.*;
 
 /**
  * @author ignatov
@@ -138,8 +139,9 @@ public class ExpressionVisitor extends StatementVisitor {
   public void visitConditionalExpression(@NotNull PsiConditionalExpression expression) {
     super.visitConditionalExpression(expression);
     PsiExpression condition = expression.getCondition();
-    Expression e = condition.getType() != null ?
-      createSureCallOnlyForChain(condition, condition.getType()) :
+    PsiType type = condition.getType();
+    Expression e = type != null ?
+      createSureCallOnlyForChain(condition, type) :
       expressionToExpression(condition);
     myResult = new ParenthesizedExpression(
       new IfStatement(
@@ -175,18 +177,18 @@ public class ExpressionVisitor extends StatementVisitor {
     final PsiType type = expression.getType();
     if (type != null) {
       String canonicalTypeStr = type.getCanonicalText();
-      if (canonicalTypeStr.equals("double") || canonicalTypeStr.equals("java.lang.Double"))
+      if (canonicalTypeStr.equals("double") || canonicalTypeStr.equals(JAVA_LANG_DOUBLE))
         text = text.replace("D", "").replace("d", "");
-      if (canonicalTypeStr.equals("float") || canonicalTypeStr.equals("java.lang.Float"))
+      if (canonicalTypeStr.equals("float") || canonicalTypeStr.equals(JAVA_LANG_FLOAT))
         text = text.replace("F", "").replace("f", "") + "." + "flt";
-      if (canonicalTypeStr.equals("long") || canonicalTypeStr.equals("java.lang.Long"))
+      if (canonicalTypeStr.equals("long") || canonicalTypeStr.equals(JAVA_LANG_LONG))
         text = text.replace("L", "").replace("l", "");
-      if (canonicalTypeStr.equals("int") || canonicalTypeStr.equals("java.lang.Integer")) // need for hex support
+      if (canonicalTypeStr.equals("int") || canonicalTypeStr.equals(JAVA_LANG_INTEGER)) // need for hex support
         text = value != null ? value.toString() : text;
 
-      if (canonicalTypeStr.equals("java.lang.String"))
+      if (canonicalTypeStr.equals(JAVA_LANG_STRING))
         isQuotingNeeded = false;
-      if (canonicalTypeStr.equals("char") || canonicalTypeStr.equals("java.lang.Character"))
+      if (canonicalTypeStr.equals("char") || canonicalTypeStr.equals(JAVA_LANG_CHARACTER))
         isQuotingNeeded = false;
     }
     myResult = new LiteralExpression(new IdentifierImpl(text, false, isQuotingNeeded));
@@ -249,7 +251,6 @@ public class ExpressionVisitor extends StatementVisitor {
       new MethodCallExpression(
         new IdentifierImpl("init"),
         expressionsToExpressionList(arguments),
-        false,
         typeParameters));
   }
 
@@ -302,7 +303,6 @@ public class ExpressionVisitor extends StatementVisitor {
     super.visitReferenceExpression(expression);
 
     final boolean isFieldReference = isFieldReference(expression, getContainingClass(expression));
-    final boolean hasDollar = isFieldReference && isInsidePrimaryConstructor(expression);
     final boolean insideSecondaryConstructor = isInsideSecondaryConstructor(expression);
     final boolean hasReceiver = isFieldReference && insideSecondaryConstructor;
     final boolean isThis = isThisExpression(expression);
@@ -324,7 +324,7 @@ public class ExpressionVisitor extends StatementVisitor {
   }
 
   @NotNull
-  static String getClassNameWithConstructor(@NotNull PsiReferenceExpression expression) {
+  private static String getClassNameWithConstructor(@NotNull PsiReferenceExpression expression) {
     PsiElement context = expression.getContext();
     while (context != null) {
       if (context instanceof PsiMethod && ((PsiMethod) context).isConstructor()) {
