@@ -1,5 +1,5 @@
 diff --git a/.idea/modules.xml b/.idea/modules.xml
-index 9c559c5..15f11ba 100644
+index 299b010..0343626 100644
 --- a/.idea/modules.xml
 +++ b/.idea/modules.xml
 @@ -9,6 +9,7 @@
@@ -9,7 +9,7 @@ index 9c559c5..15f11ba 100644
 +      <module fileurl="file://$PROJECT_DIR$/compiler/frontend.xsd/frontend.xsd.iml" filepath="$PROJECT_DIR$/compiler/frontend.xsd/frontend.xsd.iml" />
        <module fileurl="file://$PROJECT_DIR$/grammar/grammar.iml" filepath="$PROJECT_DIR$/grammar/grammar.iml" />
        <module fileurl="file://$PROJECT_DIR$/idea/idea.iml" filepath="$PROJECT_DIR$/idea/idea.iml" />
-       <module fileurl="file://$PROJECT_DIR$/stdlib/stdlib.iml" filepath="$PROJECT_DIR$/stdlib/stdlib.iml" />
+       <module fileurl="file://$PROJECT_DIR$/shift/shift.iml" filepath="$PROJECT_DIR$/shift/shift.iml" />
 diff --git a/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java b/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java
 index 8dafa6b..cdd4913 100644
 --- a/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java
@@ -60,7 +60,7 @@ index 5102197..f5aa63f 100644
  </module>
  
 diff --git a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java
-index c7501b8..db09095 100644
+index f878d44..84aa501 100644
 --- a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java
 +++ b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java
 @@ -83,9 +83,13 @@ public class AnalyzerFacade {
@@ -70,10 +70,10 @@ index c7501b8..db09095 100644
 +        JavaSemanticServices javaSemanticServices = new JavaSemanticServices(project, JetSemanticServices.createSemanticServices(project), bindingTraceContext);
          return AnalyzingUtils.analyzeNamespacesWithGivenTrace(
                  project,
--                JavaBridgeConfiguration.createJavaBridgeConfiguration(project, bindingTraceContext, StandardConfiguration.createStandardConfiguration(project, semanticServices)),
+-                JavaBridgeConfiguration.createJavaBridgeConfiguration(project, bindingTraceContext, StandardConfiguration.createStandardConfiguration(project)),
 +                XsdBridgeConfiguration.createXsdBridgeConfiguration(
 +                        project,
-+                        JavaBridgeConfiguration.createJavaBridgeConfiguration(StandardConfiguration.createStandardConfiguration(project, semanticServices), javaSemanticServices),
++                        JavaBridgeConfiguration.createJavaBridgeConfiguration(StandardConfiguration.createStandardConfiguration(project), javaSemanticServices),
 +                        javaSemanticServices),
                  declarations,
                  filesToAnalyzeCompletely,
@@ -114,19 +114,19 @@ index d2dc2bd..5835234 100644
  
 diff --git a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/XsdBridgeConfiguration.java b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/XsdBridgeConfiguration.java
 new file mode 100644
-index 0000000..bac0e73
+index 0000000..f35e5c4
 --- /dev/null
 +++ b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/XsdBridgeConfiguration.java
-@@ -0,0 +1,46 @@
+@@ -0,0 +1,50 @@
 +package org.jetbrains.jet.lang.resolve.java;
 +
 +import com.intellij.openapi.project.Project;
 +import org.jetbrains.annotations.NotNull;
 +import org.jetbrains.jet.lang.Configuration;
-+import org.jetbrains.jet.lang.JetSemanticServices;
 +import org.jetbrains.jet.lang.descriptors.NamespaceDescriptor;
 +import org.jetbrains.jet.lang.resolve.BindingTrace;
 +import org.jetbrains.jet.lang.resolve.DescriptorUtils;
++import org.jetbrains.jet.lang.resolve.scopes.JetScope;
 +import org.jetbrains.jet.lang.resolve.scopes.WritableScope;
 +import org.jetbrains.jet.lang.resolve.xsd2k.XsdScope;
 +
@@ -154,7 +154,11 @@ index 0000000..bac0e73
 +    public void addDefaultImports(@NotNull BindingTrace trace, @NotNull WritableScope rootScope) {
 +//                rootScope.importScope(new XsdScope(project, trace, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/maven.xsd", "jet.xsd.maven").getScope());
 +//                rootScope.importScope(new XsdScope(project, trace, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/facebook.xsd", "jet.xsd.facebook").getScope());
-+        rootScope.importScope(XsdScope.createOrGetXsdScope(project, trace, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/shiporder.xsd", "jet.xsd.shiporder", javaSemanticServices));
++        JetScope shiporder = XsdScope.createXsdScope(project, trace, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/shiporder.xsd", "jet.xsd.shiporder", javaSemanticServices);
++        rootScope.importScope(shiporder);
++        JetScope example = XsdScope.createXsdScope(project, trace, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/example.xsd", "jet.xsd.example", javaSemanticServices);
++        rootScope.importScope(example);
++//        rootScope.importScope(XsdScope.createXsdScope(project, trace, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/simple.xsd", "jet.xsd.simple", javaSemanticServices));
 +        delegateConfiguration.addDefaultImports(trace, rootScope);
 +    }
 +
@@ -193,6 +197,25 @@ index 0000000..5e97eab
 +  </component>
 +</module>
 +
+diff --git a/compiler/frontend.xsd/src/jet/xsd/example.xsd b/compiler/frontend.xsd/src/jet/xsd/example.xsd
+new file mode 100644
+index 0000000..564ac57
+--- /dev/null
++++ b/compiler/frontend.xsd/src/jet/xsd/example.xsd
+@@ -0,0 +1,12 @@
++<?xml version="1.0"?>
++  <xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
++    <xs:element name="Person">
++      <xs:complexType>
++        <xs:sequence>
++          <xs:element name="firstname" type="xs:string"/>
++          <xs:element name="lastname" type="xs:string"/>
++          <xs:element name="age" type="xs:int"/>
++        </xs:sequence>
++      </xs:complexType>
++    </xs:element>
++  </xs:schema>
+\ No newline at end of file
 diff --git a/compiler/frontend.xsd/src/jet/xsd/facebook.xsd b/compiler/frontend.xsd/src/jet/xsd/facebook.xsd
 new file mode 100644
 index 0000000..dea714b
@@ -5005,12 +5028,35 @@ index 0000000..5a45c45
 +        </xs:complexType>
 +    </xs:element>
 +</xs:schema>
+diff --git a/compiler/frontend.xsd/src/jet/xsd/simple.xsd b/compiler/frontend.xsd/src/jet/xsd/simple.xsd
+new file mode 100644
+index 0000000..24fce79
+--- /dev/null
++++ b/compiler/frontend.xsd/src/jet/xsd/simple.xsd
+@@ -0,0 +1,16 @@
++<?xml version="1.0"?>
++<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
++  <xs:element name="root" type="tRoot"/>
++  <xs:complexType name="tRoot">
++    <xs:sequence>
++      <xs:element name="child" type="tChild"/>
++    </xs:sequence>
++  </xs:complexType>
++  <xs:simpleType name="tChild">
++    <xs:restriction base="xs:string">
++      <xs:enumeration value="value1"/>
++      <xs:enumeration value="value2"/>
++      <xs:enumeration value="value3"/>
++    </xs:restriction>
++  </xs:simpleType>
++</xs:schema>
+\ No newline at end of file
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdParser.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdParser.java
 new file mode 100644
-index 0000000..15f2c7f
+index 0000000..0cbf923
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdParser.java
-@@ -0,0 +1,37 @@
+@@ -0,0 +1,38 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k;
 +
 +import com.sun.xml.xsom.parser.XSOMParser;
@@ -5044,6 +5090,7 @@ index 0000000..15f2c7f
 +
 +    public static void main(String [] args) {
 +        System.out.println(
++//                parse(new File("/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/example.xsd"), "jet.xsd.maven")
 +                parse(new File("/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/maven.xsd"), "jet.xsd.maven")
 +        );
 +    }
@@ -5051,7 +5098,7 @@ index 0000000..15f2c7f
 \ No newline at end of file
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdScope.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdScope.java
 new file mode 100644
-index 0000000..19578fc
+index 0000000..1d3486c
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdScope.java
 @@ -0,0 +1,72 @@
@@ -5086,9 +5133,12 @@ index 0000000..19578fc
 + * @author ignatov
 + */
 +public class XsdScope {
++    private XsdScope() {
++    }
++
 +    private static HashMap<String, String> importedNamespacesText = new HashMap<String, String>();
 +
-+    public static JetScope createOrGetXsdScope(@NotNull Project project, BindingTrace trace, String xsdFileName, String namespaceName, JavaSemanticServices javaSemanticServices) {
++    public static JetScope createXsdScope(@NotNull Project project, BindingTrace trace, String xsdFileName, String namespaceName, JavaSemanticServices javaSemanticServices) {
 +        String text;
 +        if (!importedNamespacesText.containsKey(namespaceName)) {
 +            text = XsdParser.parse(new File(xsdFileName), namespaceName);
@@ -5105,18 +5155,15 @@ index 0000000..19578fc
 +            e.printStackTrace();
 +        }
 +        AnalyzingUtils.checkForSyntacticErrors(file);
-+        JetSemanticServices bootstrappingSemanticServices = JetSemanticServices.createSemanticServices(project);
 +
 +        BindingContext bindingContext = AnalyzingUtils.analyzeNamespaces(
 +                project,
-+                JavaBridgeConfiguration.createJavaBridgeConfiguration(StandardConfiguration.createStandardConfiguration(project, bootstrappingSemanticServices), javaSemanticServices),
++                JavaBridgeConfiguration.createJavaBridgeConfiguration(StandardConfiguration.createStandardConfiguration(project), javaSemanticServices),
 +                Collections.singleton(file.getRootNamespace()),
 +                Predicates.<PsiFile>alwaysFalse(),
-+                JetControlFlowDataTraceFactory.EMPTY,
-+                bootstrappingSemanticServices);
++                JetControlFlowDataTraceFactory.EMPTY);
 +
-+        NamespaceDescriptor namespaceDescriptor;
-+        namespaceDescriptor = (NamespaceDescriptorImpl) bindingContext.get(BindingContext.DECLARATION_TO_DESCRIPTOR, file.getRootNamespace());
++        NamespaceDescriptor namespaceDescriptor = (NamespaceDescriptorImpl) bindingContext.get(BindingContext.DECLARATION_TO_DESCRIPTOR, file.getRootNamespace());
 +
 +        AnalyzingUtils.throwExceptionOnErrors(trace.getBindingContext());
 +
@@ -5129,28 +5176,26 @@ index 0000000..19578fc
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java
 new file mode 100644
-index 0000000..fa8f649
+index 0000000..518f178
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java
-@@ -0,0 +1,198 @@
+@@ -0,0 +1,179 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k;
 +
++import com.google.common.base.Joiner;
 +import com.sun.xml.xsom.*;
 +import com.sun.xml.xsom.impl.util.SchemaTreeTraverser;
 +
-+import java.util.HashMap;
-+import java.util.LinkedList;
-+import java.util.List;
-+import java.util.Map;
++import java.util.*;
 +
 +/**
 + * @author ignatov
 + */
-+class XsdVisitor extends SchemaTreeTraverser {
++public class XsdVisitor extends SchemaTreeTraverser {
 +    private final static String HTTP_WWW_W3_ORG_2001_XMLSCHEMA = "http://www.w3.org/2001/XMLSchema";
 +    private final static String OFFSET = "    ";
 +    private final static String N = System.getProperty("line.separator");
-+    private final Map<String, String> typeMap;
++    private final static Map<String, String> typeMap = initializeTypeMap();
 +    private final StringBuilder classesBuilder;
 +
 +    public String getClasses() {
@@ -5158,10 +5203,6 @@ index 0000000..fa8f649
 +    }
 +
 +    public XsdVisitor(String namespace) {
-+        typeMap = new HashMap<String, String>();
-+
-+        initializeTypeMap();
-+
 +        classesBuilder = new StringBuilder();
 +        addNamespaceAndDefaultImports(namespace);
 +    }
@@ -5177,32 +5218,38 @@ index 0000000..fa8f649
 +        );
 +    }
 +
-+    private void initializeTypeMap() {
-+        typeMap.put("string", "String");
++    public static Collection<String> getInternalTypes() {
++        return typeMap.values();
++    }
++
++    private static Map<String, String> initializeTypeMap() {
++        Map<String, String> map = new HashMap<String, String>();
++        map.put("string", "String");
 +//        typeMap.put("integer", "BigInteger");
-+        typeMap.put("integer", "Int");
-+        typeMap.put("int", "Int");
-+        typeMap.put("long", "Long");
-+        typeMap.put("short", "Short");
++        map.put("integer", "Int");
++        map.put("int", "Int");
++        map.put("long", "Long");
++        map.put("short", "Short");
 +//        typeMap.put("decimal", "BigDecimal");
-+        typeMap.put("decimal", "Double");
-+        typeMap.put("float", "Float");
-+        typeMap.put("double", "Double");
-+        typeMap.put("boolean", "Boolean");
-+        typeMap.put("byte", "Byte");
-+        typeMap.put("dateTime", "XMLGregorianCalendar");
-+        typeMap.put("base64Binary", "ByteArray");
-+        typeMap.put("hexBinary", "ByteArray");
-+        typeMap.put("unsignedInt", "Long");
-+        typeMap.put("unsignedShort", "Int");
-+        typeMap.put("unsignedByte", "Short");
-+        typeMap.put("time", "XMLGregorianCalendar");
-+        typeMap.put("date", "XMLGregorianCalendar");
-+        typeMap.put("g", "XMLGregorianCalendar");
-+        typeMap.put("anySimpleType", "Any"); // for elements
++        map.put("decimal", "Double");
++        map.put("float", "Float");
++        map.put("double", "Double");
++        map.put("boolean", "Boolean");
++        map.put("byte", "Byte");
++        map.put("dateTime", "XMLGregorianCalendar");
++        map.put("base64Binary", "ByteArray");
++        map.put("hexBinary", "ByteArray");
++        map.put("unsignedInt", "Long");
++        map.put("unsignedShort", "Int");
++        map.put("unsignedByte", "Short");
++        map.put("time", "XMLGregorianCalendar");
++        map.put("date", "XMLGregorianCalendar");
++        map.put("g", "XMLGregorianCalendar");
++        map.put("anySimpleType", "Any"); // for elements
 +//        typeMap.put("anySimpleType [b]", "String"); // for attributes
-+        typeMap.put("duration", "String");
-+        typeMap.put("positiveInteger", "Int");
++        map.put("duration", "String");
++        map.put("positiveInteger", "Int");
++        return map;
 +    }
 +
 +    @Override
@@ -5243,7 +5290,7 @@ index 0000000..fa8f649
 +    }
 +
 +    private static String createClassDeclaration(final String name, final List<String> vars) {
-+        return "class" + " " + upperFirst(name) + "(" + N + join(vars, "," + N) + N + ")" + " " + "{" + N +
++        return "class" + " " + upperFirst(name) + "(" + N + Joiner.on("," + N).join(vars) + N + ")" + " " + "{" + N +
 +               "    fun toXML() = \"<XML>\"" + N +
 +               "}" + N;
 +    }
@@ -5311,35 +5358,16 @@ index 0000000..fa8f649
 +        return string;
 +//        return string.substring(0, 1).toUpperCase() + string.substring(1);
 +    }
-+
-+    private static String join(final String[] array, final String delimiter) {
-+        StringBuilder buffer = new StringBuilder();
-+        boolean haveDelimiter = (delimiter != null);
-+
-+        for (int i = 0; i < array.length; i++) {
-+            buffer.append(array[i]);
-+
-+            if (haveDelimiter && (i + 1) < array.length) {
-+                buffer.append(delimiter);
-+            }
-+        }
-+
-+        return buffer.toString();
-+    }
-+
-+    public static String join(final List<String> array, final String delimiter) {
-+        return join(array.toArray(new String[array.size()]), delimiter);
-+    }
 +}
-diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdChangerCommon.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdChangerCommon.java
+diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java
 new file mode 100644
-index 0000000..b124c1d
+index 0000000..c265ff1
 --- /dev/null
-+++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdChangerCommon.java
-@@ -0,0 +1,91 @@
++++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java
+@@ -0,0 +1,98 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k.changers;
 +
-+import com.intellij.openapi.project.Project;
++import com.google.common.base.Joiner;
 +import org.jetbrains.annotations.NotNull;
 +import org.jetbrains.annotations.Nullable;
 +import org.jetbrains.jet.lang.descriptors.DeclarationDescriptor;
@@ -5347,26 +5375,50 @@ index 0000000..b124c1d
 +import org.jetbrains.jet.lang.psi.*;
 +import org.jetbrains.jet.lang.resolve.BindingContext;
 +import org.jetbrains.jet.lang.resolve.xsd2k.XsdScope;
++import org.jetbrains.jet.lang.resolve.xsd2k.XsdVisitor;
 +import org.jetbrains.jet.lang.types.JetType;
 +import org.jetbrains.jet.lang.types.TypeConstructor;
++
++import java.util.LinkedList;
++import java.util.List;
 +
 +/**
 + * @author ignatov
 + */
-+public class XsdChangerCommon extends JetVisitorVoid {
++public class XsdCommonChanger extends JetVisitorVoid {
 +    public static final String COMMA_SPACE = ", ";
 +    public static final String LBRACE = "(";
 +    public static final String RBRACE = ")";
 +    public static final String Q = "\"";
++    public static final String DOT = ".";
 +    public static final String QUEST_DOT = "?.";
 +
 +    BindingContext bindingContext;
 +
-+    public XsdChangerCommon(BindingContext bindingContext) {
++    public XsdCommonChanger(BindingContext bindingContext) {
 +        this.bindingContext = bindingContext;
 +    }
 +
-+    protected static boolean isListType(@Nullable JetType type) {
++    @Override
++    public void visitTypeReference(JetTypeReference typeReference) {
++        JetType type = bindingContext.get(BindingContext.TYPE, typeReference);
++        if (fromXSD(type)) {
++            typeReference.replace(JetPsiFactory.createType(typeReference.getProject(), "Element?"));
++        }
++        super.visitTypeReference(typeReference);
++    }
++
++    public static boolean isChild(@Nullable JetType type) {
++        if (type == null) {
++            return false;
++        }
++        if (XsdVisitor.getInternalTypes().contains(type.toString())) {
++            return false;
++        }
++        return true;
++    }
++
++    public static boolean isList(@Nullable JetType type) {
 +        if (type == null) {
 +            return false;
 +        }
@@ -5385,19 +5437,7 @@ index 0000000..b124c1d
 +        namespace.acceptChildren(this);
 +    }
 +
-+    @Override
-+    public void visitNamedFunction(JetNamedFunction function) {
-+        final Project project = function.getProject();
-+
-+        for (final JetParameter p : function.getValueParameters()) {
-+            if (fromXSD(bindingContext.get(BindingContext.TYPE, p.getTypeReference()))) {
-+                p.replace(JetPsiFactory.createParameter(project, p.getName(), "Element?"));
-+            }
-+        }
-+        super.visitNamedFunction(function);
-+    }
-+
-+    static boolean fromXSD(@Nullable JetType type) {
++    public static boolean fromXSD(@Nullable JetType type) {
 +        if (type != null) {
 +            try {
 +                return fromXSD(getContainingNamespaceName(type.getConstructor().getDeclarationDescriptor()));
@@ -5408,29 +5448,24 @@ index 0000000..b124c1d
 +        return false;
 +    }
 +
-+    static String getContainingNamespaceName(DeclarationDescriptor declarationDescriptor) {
-+        String namespaceName = "";
++    public static String getContainingNamespaceName(DeclarationDescriptor declarationDescriptor) {
++        List<String> namespaceNames = new LinkedList<String>();
 +        while (declarationDescriptor != null) {
 +            if (declarationDescriptor instanceof NamespaceDescriptor) {
-+                namespaceName = namespaceName.isEmpty() ? declarationDescriptor.getName() : declarationDescriptor.getName() + "." + namespaceName;
++                namespaceNames.add(0, declarationDescriptor.getName());
 +            }
 +            declarationDescriptor = declarationDescriptor.getContainingDeclaration();
 +        }
-+        return namespaceName;
++        return Joiner.on(DOT).join(namespaceNames);
 +    }
 +
-+    @Override
-+    public void visitReferenceExpression(JetReferenceExpression expression) {
-+        super.visitReferenceExpression(expression);
-+    }
-+
-+    static boolean fromXSD(@NotNull String namespaceName) {
++    public static boolean fromXSD(@NotNull String namespaceName) {
 +        return XsdScope.isImported(namespaceName);
 +    }
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java
 new file mode 100644
-index 0000000..b5d9675
+index 0000000..1ec9260
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java
 @@ -0,0 +1,105 @@
@@ -5452,7 +5487,7 @@ index 0000000..b5d9675
 +/**
 + * @author ignatov
 + */
-+public class XsdConstructorChanger extends XsdChangerCommon {
++public class XsdConstructorChanger extends XsdCommonChanger {
 +    public XsdConstructorChanger(BindingContext bindingContext) {
 +        super(bindingContext);
 +    }
@@ -5481,7 +5516,7 @@ index 0000000..b5d9675
 +            List<String> actions = new LinkedList<String>();
 +            if (declarationDescriptor instanceof ConstructorDescriptor) {
 +                for (ValueParameterDescriptor p : ((ConstructorDescriptor) declarationDescriptor).getValueParameters()) {
-+                    if (isListType(p.getOutType())) { // addContent
++                    if (isChild(p.getOutType())) { // addContent
 +                        actions.add("addContent");
 +                    }
 +                    else { // setAttribute
@@ -5533,7 +5568,7 @@ index 0000000..b5d9675
 +    }
 +
 +    private static String quoteIfNeeded(String string) {
-+        if (string.startsWith("\"") && string.startsWith("\"")) {
++        if (string.startsWith(Q) && string.startsWith(Q)) {
 +            return string;
 +        }
 +        return Q + string + Q;
@@ -5541,7 +5576,7 @@ index 0000000..b5d9675
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGenericChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGenericChanger.java
 new file mode 100644
-index 0000000..8a2efcb
+index 0000000..fbdb859
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGenericChanger.java
 @@ -0,0 +1,24 @@
@@ -5555,7 +5590,7 @@ index 0000000..8a2efcb
 +/**
 + * @author ignatov
 + */
-+public class XsdGenericChanger extends XsdChangerCommon {
++public class XsdGenericChanger extends XsdCommonChanger {
 +    public XsdGenericChanger(BindingContext bindingContext) {
 +        super(bindingContext);
 +    }
@@ -5571,10 +5606,10 @@ index 0000000..8a2efcb
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java
 new file mode 100644
-index 0000000..3dab89e
+index 0000000..7732a98
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,44 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k.changers;
 +
 +import org.jetbrains.jet.lang.psi.JetDotQualifiedExpression;
@@ -5589,7 +5624,7 @@ index 0000000..3dab89e
 +/**
 + * @author ignatov
 + */
-+public class XsdGetterChanger extends XsdChangerCommon {
++public class XsdGetterChanger extends XsdCommonChanger {
 +    public XsdGetterChanger(BindingContext bindingContext) {
 +        super(bindingContext);
 +    }
@@ -5608,8 +5643,10 @@ index 0000000..3dab89e
 +        if (fromXSD(receiverType)) {
 +            if (selector != null && !selector.getText().equals("toXML()")) {
 +                String action = format("{0}?.getAttributeValue(\"{1}\")", receiver.getText(), selector.getText());
-+                if (isListType(selectorType)) {
-+                    action = format("({0}?.getChildren(\"{1}\") as List<org.jdom.Element>)", receiver.getText(), selector.getText().replace("List", ""));
++                if (isList(selectorType)) {
++                    action = format("({0}?.getChildren(\"{1}\") as List<org.jdom.Element?>)", receiver.getText(), selector.getText().replace("List", ""));
++                } else if (isChild(selectorType)) {
++                    action = format("({0}?.getChild(\"{1}\") as org.jdom.Element?)", receiver.getText(), selector.getText());
 +                }
 +                expression.replace(JetPsiFactory.createExpression(expression.getProject(), action));
 +            }
@@ -5619,7 +5656,7 @@ index 0000000..3dab89e
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java
 new file mode 100644
-index 0000000..bf0f0b3
+index 0000000..174d043
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java
 @@ -0,0 +1,55 @@
@@ -5639,7 +5676,7 @@ index 0000000..bf0f0b3
 +/**
 + * @author ignatov
 + */
-+public class XsdSetterChanger extends XsdChangerCommon {
++public class XsdSetterChanger extends XsdCommonChanger {
 +    public XsdSetterChanger(BindingContext bindingContext) {
 +        super(bindingContext);
 +    }
@@ -5664,7 +5701,7 @@ index 0000000..bf0f0b3
 +                if (fromXSD(receiverType)) {
 +                    if (selector != null && right != null) {
 +                        String action = format("setAttribute(\"{0}\", {1})", selector.getText(), right.getText());
-+                        if (isListType(selectorType)) {
++                        if (isChild(selectorType)) {
 +                            action = format("setContent({0})", right.getText());
 +                        }
 +                        replaces.add(new Pair<JetExpression, JetExpression>(
@@ -5705,7 +5742,7 @@ index 061858a..9feed91 100644
  </module>
  
 diff --git a/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java b/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
-index 766868d..1e87305 100644
+index 766868d..95a44a1 100644
 --- a/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
 +++ b/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
 @@ -12,6 +12,7 @@ import com.intellij.openapi.module.Module;
@@ -5859,7 +5896,7 @@ index 766868d..1e87305 100644
 +                            public void run() {
 +                                for (final JetNamespace n : namespaces[0]) {
 +                                    n.accept(new XsdConstructorChanger(bindingContexts[0]));
-+                                    n.accept(new XsdChangerCommon(bindingContexts[0]));
++                                    n.accept(new XsdCommonChanger(bindingContexts[0]));
 +                                    if (n.getName() != null && n.getName().equals("xsd_test2")) {
 +                                        System.out.println(n.getText());
 +//                                        System.out.println(DebugUtil.psiToString(n, false));
