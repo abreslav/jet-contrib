@@ -1,5 +1,5 @@
 diff --git a/.idea/modules.xml b/.idea/modules.xml
-index 463eb8b..3e5a877 100644
+index 13927ad..8ef1f54 100644
 --- a/.idea/modules.xml
 +++ b/.idea/modules.xml
 @@ -11,6 +11,7 @@
@@ -7,9 +7,9 @@ index 463eb8b..3e5a877 100644
        <module fileurl="file://$PROJECT_DIR$/grammar/grammar.iml" filepath="$PROJECT_DIR$/grammar/grammar.iml" />
        <module fileurl="file://$PROJECT_DIR$/idea/idea.iml" filepath="$PROJECT_DIR$/idea/idea.iml" />
 +      <module fileurl="file://$PROJECT_DIR$/j2k/j2k.iml" filepath="$PROJECT_DIR$/j2k/j2k.iml" />
+       <module fileurl="file://$PROJECT_DIR$/shift/shift.iml" filepath="$PROJECT_DIR$/shift/shift.iml" />
        <module fileurl="file://$PROJECT_DIR$/stdlib/stdlib.iml" filepath="$PROJECT_DIR$/stdlib/stdlib.iml" />
      </modules>
-   </component>
 diff --git a/idea/idea.iml b/idea/idea.iml
 index 061858a..50f1bf2 100644
 --- a/idea/idea.iml
@@ -505,10 +505,10 @@ index 0000000..0725715
 +
 diff --git a/j2k/src/org/jetbrains/jet/j2k/Converter.java b/j2k/src/org/jetbrains/jet/j2k/Converter.java
 new file mode 100644
-index 0000000..360c7cd
+index 0000000..a94f30c
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/Converter.java
-@@ -0,0 +1,552 @@
+@@ -0,0 +1,725 @@
 +package org.jetbrains.jet.j2k;
 +
 +import com.intellij.psi.*;
@@ -525,6 +525,9 @@ index 0000000..360c7cd
 +
 +import java.util.*;
 +
++import static org.jetbrains.jet.j2k.ConverterUtil.createMainFunction;
++import static org.jetbrains.jet.j2k.visitors.TypeVisitor.*;
++
 +/**
 + * @author ignatov
 + */
@@ -537,9 +540,15 @@ index 0000000..360c7cd
 +      add("javax.annotation.Nonnull");
 +    }
 +  };
-+  @NotNull private static Set<String> ourClassIdentifiers = new HashSet<String>();
-+  @NotNull private static final Dispatcher ourDispatcher = new Dispatcher();
-+  @Nullable private static PsiType ourMethodReturnType = null;
++  @NotNull
++  private static Set<String> ourClassIdentifiers = new HashSet<String>();
++  @NotNull
++  private static final Dispatcher ourDispatcher = new Dispatcher();
++  @Nullable
++  private static PsiType ourMethodReturnType = null;
++
++  private Converter() {
++  }
 +
 +  public static void setClassIdentifiers(@NotNull Set<String> identifiers) {
 +    ourClassIdentifiers = identifiers;
@@ -561,18 +570,21 @@ index 0000000..360c7cd
 +
 +  @NotNull
 +  public static File fileToFile(@NotNull PsiJavaFile javaFile) {
-+    final PsiImportList importList = javaFile.getImportList();
-+    List<Import> imports = importList == null ? Collections.<Import>emptyList() : importsToImportList(importList.getAllImportStatements());
-+    return new File(quoteKeywords(javaFile.getPackageName()), imports, classesToClassList(javaFile.getClasses()));
++    return fileToFile(javaFile, Collections.<String>emptyList());
 +  }
 +
 +  @NotNull
 +  public static File fileToFileWithCompatibilityImport(@NotNull PsiJavaFile javaFile) {
++    return fileToFile(javaFile, Collections.singletonList("std.compatibility.*"));
++  }
++
++  @NotNull
++  private static File fileToFile(PsiJavaFile javaFile, List<String> additionalImports) {
 +    final PsiImportList importList = javaFile.getImportList();
 +    List<Import> imports = importList == null ? Collections.<Import>emptyList() : importsToImportList(importList.getAllImportStatements());
-+    imports.add(new Import("std.*"));
-+    imports.add(new Import("std.compatibility.*"));
-+    return new File(quoteKeywords(javaFile.getPackageName()), imports, classesToClassList(javaFile.getClasses()));
++    for (String i : additionalImports)
++      imports.add(new Import(i));
++    return new File(quoteKeywords(javaFile.getPackageName()), imports, classesToClassList(javaFile.getClasses()), createMainFunction(javaFile));
 +  }
 +
 +  @NotNull
@@ -620,7 +632,8 @@ index 0000000..360c7cd
 +  @NotNull
 +  private static List<Parameter> createParametersFromFields(@NotNull List<? extends Field> fields) {
 +    List<Parameter> result = new LinkedList<Parameter>();
-+    for (Field f : fields) result.add(new Parameter(f.getIdentifier(), f.getType()));
++    for (Field f : fields)
++      result.add(new Parameter(new IdentifierImpl("_" + f.getIdentifier().getName()), f.getType()));
 +    return result;
 +  }
 +
@@ -629,7 +642,7 @@ index 0000000..360c7cd
 +    List<Statement> result = new LinkedList<Statement>();
 +    for (Field f : fields) {
 +      final String identifierToKotlin = f.getIdentifier().toKotlin();
-+      result.add(new DummyStringExpression("$" + identifierToKotlin + " = " + identifierToKotlin));
++      result.add(new DummyStringExpression(identifierToKotlin + " = " + "_" + identifierToKotlin));
 +    }
 +    return result;
 +  }
@@ -780,7 +793,7 @@ index 0000000..360c7cd
 +      new IdentifierImpl(field.getName()), // TODO
 +      modifiers,
 +      typeToType(field.getType()),
-+      expressionToExpression(field.getInitializer()) // TODO: add modifiers
++      createSureCallOnlyForChain(field.getInitializer(), field.getType()) // TODO: add modifiers
 +    );
 +  }
 +
@@ -869,14 +882,47 @@ index 0000000..360c7cd
 +  }
 +
 +  private static boolean isOverrideAnyMethodExceptMethodsFromObject(@NotNull PsiMethod method) {
++    boolean counter = normalCase(method);
++    if (counter)
++      return true;
++    if (isInheritFromObject(method))
++      return caseForObject(method);
++    return false;
++  }
++
++  private static boolean caseForObject(@NotNull PsiMethod method) {
++    PsiClass containing = method.getContainingClass();
++    if (containing != null) {
++      for (PsiClassType s : containing.getSuperTypes()) {
++        String canonicalText = s.getCanonicalText();
++        if (!canonicalText.equals(JAVA_LANG_OBJECT) && !getClassIdentifiers().contains(canonicalText)) {
++          return true;
++        }
++      }
++    }
++    return false;
++  }
++
++  private static boolean normalCase(@NotNull PsiMethod method) {
 +    int counter = 0;
 +    for (HierarchicalMethodSignature s : method.getHierarchicalMethodSignature().getSuperSignatures()) {
 +      PsiClass containingClass = s.getMethod().getContainingClass();
 +      String qualifiedName = containingClass != null ? containingClass.getQualifiedName() : "";
-+      if (qualifiedName != null && !qualifiedName.equals("java.lang.Object"))
++      if (qualifiedName != null && !qualifiedName.equals(JAVA_LANG_OBJECT))
 +        counter++;
 +    }
 +    return counter > 0;
++  }
++
++  private static boolean isInheritFromObject(@NotNull PsiMethod method) {
++    List<HierarchicalMethodSignature> superSignatures = method.getHierarchicalMethodSignature().getSuperSignatures();
++    for (HierarchicalMethodSignature s : superSignatures) {
++      PsiClass containingClass = s.getMethod().getContainingClass();
++      String qualifiedName = containingClass != null ? containingClass.getQualifiedName() : "";
++      if (qualifiedName != null && qualifiedName.equals(JAVA_LANG_OBJECT))
++        return true;
++    }
++    return false;
 +  }
 +
 +  private static boolean isOverrideObjectDirect(@NotNull final PsiMethod method) {
@@ -884,7 +930,7 @@ index 0000000..360c7cd
 +    if (superSignatures.size() == 1) {
 +      final PsiClass containingClass = superSignatures.get(0).getMethod().getContainingClass();
 +      final String qualifiedName = containingClass != null ? containingClass.getQualifiedName() : "";
-+      if (qualifiedName != null && qualifiedName.equals("java.lang.Object"))
++      if (qualifiedName != null && qualifiedName.equals(JAVA_LANG_OBJECT))
 +        return true;
 +    }
 +    return false;
@@ -1032,10 +1078,13 @@ index 0000000..360c7cd
 +  }
 +
 +  private static boolean isReadOnly(@NotNull PsiParameter parameter) {
-+    for (PsiReference r : (ReferencesSearch.search(parameter))) {
-+      if (r instanceof PsiExpression && PsiUtil.isAccessedForWriting((PsiExpression) r)) {
-+        return false;
++    try {
++      for (PsiReference r : (ReferencesSearch.search(parameter))) {
++        if (r instanceof PsiExpression && PsiUtil.isAccessedForWriting((PsiExpression) r)) {
++          return false;
++        }
 +      }
++    } catch (IllegalArgumentException ignored) {
 +    }
 +    return true;
 +  }
@@ -1060,8 +1109,209 @@ index 0000000..360c7cd
 +    }
 +    return modifiersSet;
 +  }
++
++  @NotNull
++  public static List<String> createConversions(@NotNull PsiCallExpression expression) {
++    PsiExpressionList argumentList = expression.getArgumentList();
++    PsiExpression[] arguments = argumentList != null ? argumentList.getExpressions() : new PsiExpression[]{};
++    List<String> conversions = new LinkedList<String>();
++    //noinspection UnusedDeclaration
++    for (final PsiExpression a : arguments) {
++      conversions.add("");
++    }
++
++    PsiMethod resolve = expression.resolveMethod();
++    if (resolve != null) {
++      List<PsiType> expectedTypes = new LinkedList<PsiType>();
++      List<PsiType> actualTypes = new LinkedList<PsiType>();
++
++      for (PsiParameter p : resolve.getParameterList().getParameters())
++        expectedTypes.add(p.getType());
++
++      for (PsiExpression e : arguments)
++        actualTypes.add(e.getType());
++
++      assert actualTypes.size() == expectedTypes.size() : "The type list must have the same length";
++
++      for (int i = 0; i < actualTypes.size(); i++)
++        conversions.set(i, createConversionForExpression(arguments[i], expectedTypes.get(i)));
++    }
++    return conversions;
++  }
++
++  @NotNull
++  public static List<String> createConversions(@NotNull PsiPolyadicExpression expression, PsiType expectedType) {
++    PsiExpression[] arguments = expression.getOperands();
++    int length = arguments.length;
++    List<String> conversions = new LinkedList<String>();
++
++    List<PsiType> expectedTypes = Collections.nCopies(length, expectedType);
++    List<PsiType> actualTypes = new LinkedList<PsiType>();
++
++    for (PsiExpression e : arguments)
++      actualTypes.add(e.getType());
++
++    assert actualTypes.size() == expectedTypes.size() : "The type list must have the same length";
++
++    for (int i = 0; i < actualTypes.size(); i++)
++      conversions.add(i, createConversionForExpression(arguments[i], expectedTypes.get(i)));
++
++    return conversions;
++  }
++
++  @NotNull
++  private static String createConversionForExpression(@Nullable PsiExpression expression, @NotNull PsiType expectedType) {
++    String conversion = "";
++    if (expression != null) {
++      PsiType actualType = expression.getType();
++      boolean isPrimitiveTypeOrNull = actualType == null || Node.PRIMITIVE_TYPES.contains(actualType.getCanonicalText());
++      boolean isRef = (expression instanceof PsiReferenceExpression && ((PsiReferenceExpression) expression).isQualified() || expression instanceof PsiMethodCallExpression);
++      boolean containsQuestDot = expressionToExpression(expression).toKotlin().contains("?.");
++
++      if (isPrimitiveTypeOrNull && isRef && containsQuestDot)
++        conversion += ".sure()";
++
++      if (actualType != null)
++        if (isConversionNeeded(actualType, expectedType))
++          conversion += getPrimitiveTypeConversion(expectedType.getCanonicalText());
++    }
++    return conversion;
++  }
++
++  private static boolean isConversionNeeded(@Nullable final PsiType actual, @Nullable final PsiType expected) {
++    if (actual == null || expected == null)
++      return false;
++    Map<String, String> typeMap = new HashMap<String, String>();
++    typeMap.put(JAVA_LANG_BYTE, "byte");
++    typeMap.put(JAVA_LANG_SHORT, "short");
++    typeMap.put(JAVA_LANG_INTEGER, "int");
++    typeMap.put(JAVA_LANG_LONG, "long");
++    typeMap.put(JAVA_LANG_FLOAT, "float");
++    typeMap.put(JAVA_LANG_DOUBLE, "double");
++    typeMap.put(JAVA_LANG_CHARACTER, "char");
++    String expectedStr = expected.getCanonicalText();
++    String actualStr = actual.getCanonicalText();
++    boolean o1 = AstUtil.getOrElse(typeMap, actualStr, "").equals(expectedStr);
++    boolean o2 = AstUtil.getOrElse(typeMap, expectedStr, "").equals(actualStr);
++    return !actualStr.equals(expectedStr) && (!(o1 ^ o2));
++  }
++
++  @NotNull
++  private static String getPrimitiveTypeConversion(@NotNull String type) {
++    Map<String, String> conversions = new HashMap<String, String>();
++    conversions.put("byte", "byt");
++    conversions.put("short", "sht");
++    conversions.put("int", "int");
++    conversions.put("long", "lng");
++    conversions.put("float", "flt");
++    conversions.put("double", "dbl");
++    conversions.put("char", "chr");
++
++    conversions.put(JAVA_LANG_BYTE, "byt");
++    conversions.put(JAVA_LANG_SHORT, "sht");
++    conversions.put(JAVA_LANG_INTEGER, "int");
++    conversions.put(JAVA_LANG_LONG, "lng");
++    conversions.put(JAVA_LANG_FLOAT, "flt");
++    conversions.put(JAVA_LANG_DOUBLE, "dbl");
++    conversions.put(JAVA_LANG_CHARACTER, "chr");
++
++    if (conversions.containsKey(type))
++      return "." + conversions.get(type);
++    return "";
++  }
++
++//  @NotNull
++//  private static String applyConversion(Expression expression, String conversion) {
++//    if (conversion.isEmpty())
++//      return expression.toKotlin();
++//    return "(" + expression.toKotlin() + ")" + conversion;
++//  }
++
++  @NotNull
++  public static SureCallChainExpression createSureCallOnlyForChain(@Nullable PsiExpression expression, @NotNull PsiType type) {
++    String conversion = (expression != null && (expression instanceof PsiReferenceExpression || expression instanceof PsiMethodCallExpression)) ?
++      createConversionForExpression(expression, type) : "";
++    return new SureCallChainExpression(expressionToExpression(expression), conversion);
++  }
 +}
 \ No newline at end of file
+diff --git a/j2k/src/org/jetbrains/jet/j2k/ConverterUtil.java b/j2k/src/org/jetbrains/jet/j2k/ConverterUtil.java
+new file mode 100644
+index 0000000..eb04032
+--- /dev/null
++++ b/j2k/src/org/jetbrains/jet/j2k/ConverterUtil.java
+@@ -0,0 +1,71 @@
++package org.jetbrains.jet.j2k;
++
++import com.intellij.openapi.util.Pair;
++import com.intellij.psi.*;
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.annotations.Nullable;
++
++import java.text.MessageFormat;
++import java.util.LinkedList;
++import java.util.List;
++
++/**
++ * @author ignatov
++ */
++public class ConverterUtil {
++  private ConverterUtil() {
++  }
++
++  @NotNull
++  public static String createMainFunction(@NotNull PsiFile file) {
++    List<Pair<String, PsiMethod>> classNamesWithMains = new LinkedList<Pair<String, PsiMethod>>();
++
++    for (PsiClass c : ((PsiJavaFile) file).getClasses()) {
++      PsiMethod main = findMainMethod(c);
++      if (main != null) {
++        classNamesWithMains.add(new Pair<String, PsiMethod>(c.getName(), main));
++      }
++    }
++    if (classNamesWithMains.size() > 0) {
++      String className = classNamesWithMains.get(0).getFirst();
++      return MessageFormat.format("fun main(args : Array<String?>?) = {0}.main(args)", className);
++    }
++    return "";
++  }
++
++  @Nullable
++  private static PsiMethod findMainMethod(@NotNull PsiClass aClass) {
++    if (isMainClass(aClass)) {
++      final PsiMethod[] mainMethods = aClass.findMethodsByName("main", false);
++      return findMainMethod(mainMethods);
++    }
++    return null;
++  }
++
++  @Nullable
++  private static PsiMethod findMainMethod(@NotNull PsiMethod[] mainMethods) {
++    for (PsiMethod mainMethod : mainMethods) {
++      if (isMainMethod(mainMethod)) return mainMethod;
++    }
++    return null;
++  }
++
++  private static boolean isMainClass(@NotNull PsiClass psiClass) {
++    if (psiClass instanceof PsiAnonymousClass) return false;
++    if (psiClass.isInterface()) return false;
++    return psiClass.getContainingClass() == null || psiClass.hasModifierProperty(PsiModifier.STATIC);
++  }
++
++  public static boolean isMainMethod(@Nullable PsiMethod method) {
++    if (method == null || method.getContainingClass() == null) return false;
++    if (PsiType.VOID != method.getReturnType()) return false;
++    if (!method.hasModifierProperty(PsiModifier.STATIC)) return false;
++    if (!method.hasModifierProperty(PsiModifier.PUBLIC)) return false;
++    final PsiParameter[] parameters = method.getParameterList().getParameters();
++    if (parameters.length != 1) return false;
++    final PsiType type = parameters[0].getType();
++    if (!(type instanceof PsiArrayType)) return false;
++    final PsiType componentType = ((PsiArrayType) type).getComponentType();
++    return componentType.equalsToText("java.lang.String");
++  }
++}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/AnonymousClass.java b/j2k/src/org/jetbrains/jet/j2k/ast/AnonymousClass.java
 new file mode 100644
 index 0000000..e8a87d2
@@ -1127,7 +1377,7 @@ index 0000000..4a511b7
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/ArrayInitializerExpression.java b/j2k/src/org/jetbrains/jet/j2k/ast/ArrayInitializerExpression.java
 new file mode 100644
-index 0000000..a7ca974
+index 0000000..b08f1b7
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/ArrayInitializerExpression.java
 @@ -0,0 +1,70 @@
@@ -1142,7 +1392,7 @@ index 0000000..a7ca974
 + * @author ignatov
 + */
 +public class ArrayInitializerExpression extends Expression {
-+  private Type myType;
++  private final Type myType;
 +  private final List<Expression> myInitializers;
 +
 +  public ArrayInitializerExpression(final Type type, List<Expression> initializers) {
@@ -1153,9 +1403,9 @@ index 0000000..a7ca974
 +  @NotNull
 +  private static String createArrayFunction(@NotNull final Type type) {
 +    String sType = innerTypeStr(type);
-+    if (!sType.equals("any") && PRIMITIVE_TYPES.contains(sType))
-+      return sType + "Array";
-+    return AstUtil.lowerFirstCharacter(type.convertedToNotNull().toKotlin());
++    if (PRIMITIVE_TYPES.contains(sType))
++      return sType + "Array"; // intArray
++    return AstUtil.lowerFirstCharacter(type.convertedToNotNull().toKotlin()); // array<Foo?>
 +  }
 +
 +  @NotNull
@@ -1203,10 +1453,10 @@ index 0000000..a7ca974
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/ArrayType.java b/j2k/src/org/jetbrains/jet/j2k/ast/ArrayType.java
 new file mode 100644
-index 0000000..970535a
+index 0000000..d78994f
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/ArrayType.java
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,32 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -1221,12 +1471,81 @@ index 0000000..970535a
 +    myType = type;
 +  }
 +
++  public Type getInnerType() {
++    return myType;
++  }
++
++  @NotNull
++  @Override
++  public Kind getKind() {
++    return Kind.ARRAY_TYPE;
++  }
++
 +  @NotNull
 +  @Override
 +  public String toKotlin() {
 +    if (PRIMITIVE_TYPES.contains(myType.toKotlin().toLowerCase()))
 +      return myType.toKotlin() + "Array" + isNullableStr(); // returns IntArray, BooleanArray, etc.
 +    return "Array" + "<" + myType.toKotlin() + ">" + isNullableStr();
++  }
++}
+diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/ArrayWithoutInitializationExpression.java b/j2k/src/org/jetbrains/jet/j2k/ast/ArrayWithoutInitializationExpression.java
+new file mode 100644
+index 0000000..44169fc
+--- /dev/null
++++ b/j2k/src/org/jetbrains/jet/j2k/ast/ArrayWithoutInitializationExpression.java
+@@ -0,0 +1,53 @@
++package org.jetbrains.jet.j2k.ast;
++
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.jet.j2k.util.AstUtil;
++
++import java.util.List;
++
++/**
++ * @author ignatov
++ */
++public class ArrayWithoutInitializationExpression extends Expression {
++  private final Type myType;
++  private final List<Expression> myExpressions;
++
++  public ArrayWithoutInitializationExpression(Type type, List<Expression> expressions) {
++    myType = type;
++    myExpressions = expressions;
++  }
++
++  @NotNull
++  @Override
++  public String toKotlin() {
++    if (myType.getKind() == Kind.ARRAY_TYPE)
++      return constructInnerType((ArrayType) myType, myExpressions);
++    return getConstructorName(myType);
++  }
++
++  @NotNull
++  private static String constructInnerType(@NotNull ArrayType hostType, @NotNull List<Expression> expressions) {
++    if (expressions.size() == 1)
++      return oneDim(hostType, expressions.get(0));
++    Type innerType = hostType.getInnerType();
++    if (expressions.size() > 1 && innerType.getKind() == Kind.ARRAY_TYPE)
++      return oneDim(hostType, expressions.get(0), "{" + constructInnerType((ArrayType) innerType, expressions.subList(1, expressions.size())) + "}");
++    return getConstructorName(hostType);
++  }
++
++  @NotNull
++  private static String oneDim(@NotNull Type type, @NotNull Expression size) {
++    return oneDim(type, size, EMPTY);
++  }
++
++  @NotNull
++  private static String oneDim(@NotNull Type type, @NotNull Expression size, @NotNull String init) {
++    String commaWithInit = init.isEmpty() ? EMPTY : COMMA_WITH_SPACE + init;
++    return getConstructorName(type) + "(" + size.toKotlin() + commaWithInit + ")";
++  }
++
++  @NotNull
++  private static String getConstructorName(@NotNull Type type) {
++    return AstUtil.replaceLastQuest(type.toKotlin());
 +  }
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/AssertStatement.java b/j2k/src/org/jetbrains/jet/j2k/ast/AssertStatement.java
@@ -1304,13 +1623,17 @@ index 0000000..34d1fcb
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/BinaryExpression.java b/j2k/src/org/jetbrains/jet/j2k/ast/BinaryExpression.java
 new file mode 100644
-index 0000000..5be8a82
+index 0000000..72baea6
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/BinaryExpression.java
-@@ -0,0 +1,24 @@
+@@ -0,0 +1,35 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
++import org.jetbrains.jet.j2k.util.AstUtil;
++
++import java.util.Arrays;
++import java.util.List;
 +
 +/**
 + * @author ignatov
@@ -1319,17 +1642,24 @@ index 0000000..5be8a82
 +  private final Expression myLeft;
 +  private final Expression myRight;
 +  private final String myOp;
++  private final List<String> myConversions;
 +
 +  public BinaryExpression(Expression left, Expression right, String op) {
++    this(left, right, op, Arrays.asList("", ""));
++  }
++
++  public BinaryExpression(Expression left, Expression right, String op, List<String> conversions) {
 +    myLeft = left;
 +    myRight = right;
 +    myOp = op;
++    myConversions = conversions;
 +  }
 +
 +  @NotNull
 +  @Override
 +  public String toKotlin() {
-+    return "(" + myLeft.toKotlin() + SPACE + myOp + SPACE + myRight.toKotlin() + ")";
++    List<String> expressionsWithConversions = AstUtil.applyConversions(AstUtil.nodesToKotlin(Arrays.asList(myLeft, myRight)), myConversions);
++    return "(" + AstUtil.join(expressionsWithConversions, SPACE + myOp + SPACE) + ")";
 +  }
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Block.java b/j2k/src/org/jetbrains/jet/j2k/ast/Block.java
@@ -1474,6 +1804,42 @@ index 0000000..d98463f
 +    return myIdentifier.toKotlin();
 +  }
 +}
+diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/CaseContainer.java b/j2k/src/org/jetbrains/jet/j2k/ast/CaseContainer.java
+new file mode 100644
+index 0000000..73d2e12
+--- /dev/null
++++ b/j2k/src/org/jetbrains/jet/j2k/ast/CaseContainer.java
+@@ -0,0 +1,30 @@
++package org.jetbrains.jet.j2k.ast;
++
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.jet.j2k.util.AstUtil;
++
++import java.util.LinkedList;
++import java.util.List;
++
++/**
++ * @author ignatov
++ */
++public class CaseContainer extends Statement {
++  private final List<Statement> myCaseStatement;
++  private final Block myBlock;
++
++  public CaseContainer(final List<Statement> caseStatement, @NotNull final List<Statement> statements) {
++    myCaseStatement = caseStatement;
++    List<Statement> newStatements = new LinkedList<Statement>();
++    for (Statement s : statements)
++      if (s.getKind() != Kind.BREAK && s.getKind() != Kind.CONTINUE )
++        newStatements.add(s);
++    myBlock = new Block(newStatements);
++  }
++
++  @NotNull
++  @Override
++  public String toKotlin() {
++    return AstUtil.joinNodes(myCaseStatement, COMMA_WITH_SPACE) + SPACE + "->" + SPACE + myBlock.toKotlin();
++  }
++}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/CatchStatement.java b/j2k/src/org/jetbrains/jet/j2k/ast/CatchStatement.java
 new file mode 100644
 index 0000000..7db33c9
@@ -1504,7 +1870,7 @@ index 0000000..7db33c9
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Class.java b/j2k/src/org/jetbrains/jet/j2k/ast/Class.java
 new file mode 100644
-index 0000000..c00c63a
+index 0000000..e1db54e
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Class.java
 @@ -0,0 +1,221 @@
@@ -1621,7 +1987,7 @@ index 0000000..c00c63a
 +        result.add(new Function(
 +          new IdentifierImpl("init"),
 +          modifiers,
-+          new ClassType(myName),
++          new ClassType(myName, typeParameters, false),
 +          typeParameters,
 +          f.getParams(),
 +          block
@@ -1758,10 +2124,10 @@ index 0000000..b16fedb
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/ClassType.java b/j2k/src/org/jetbrains/jet/j2k/ast/ClassType.java
 new file mode 100644
-index 0000000..830c3a4
+index 0000000..5e33087
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/ClassType.java
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,39 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -1775,9 +2141,15 @@ index 0000000..830c3a4
 + */
 +public class ClassType extends Type {
 +  private final Identifier myType;
-+  private final List<Type> myParameters;
++  private final List<? extends Element> myParameters;
 +
-+  public ClassType(Identifier type, List<Type> parameters) {
++  public ClassType(Identifier type, List<? extends Element> parameters, boolean nullable) {
++    myType = type;
++    myParameters = parameters;
++    myNullable = nullable;
++  }
++
++  public ClassType(Identifier type, List<? extends Element> parameters) {
 +    myType = type;
 +    myParameters = parameters;
 +  }
@@ -1923,6 +2295,26 @@ index 0000000..d9bbcb5
 +    return AstUtil.join(toStringList(myElements), N);
 +  }
 +}
+diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/DefaultSwitchLabelStatement.java b/j2k/src/org/jetbrains/jet/j2k/ast/DefaultSwitchLabelStatement.java
+new file mode 100644
+index 0000000..a148197
+--- /dev/null
++++ b/j2k/src/org/jetbrains/jet/j2k/ast/DefaultSwitchLabelStatement.java
+@@ -0,0 +1,14 @@
++package org.jetbrains.jet.j2k.ast;
++
++import org.jetbrains.annotations.NotNull;
++
++/**
++ * @author ignatov
++ */
++public class DefaultSwitchLabelStatement extends Statement {
++  @NotNull
++  @Override
++  public String toKotlin() {
++    return "else";
++  }
++}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/DoWhileStatement.java b/j2k/src/org/jetbrains/jet/j2k/ast/DoWhileStatement.java
 new file mode 100644
 index 0000000..02d4f64
@@ -1978,6 +2370,32 @@ index 0000000..e304161
 +  @Override
 +  public String toKotlin() {
 +    return myWho.toKotlin() + DOT + myMethodName + "(" + myWhat.toKotlin() + ")";
++  }
++}
+diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/DummyStringExpression.java b/j2k/src/org/jetbrains/jet/j2k/ast/DummyStringExpression.java
+new file mode 100644
+index 0000000..0c3eb67
+--- /dev/null
++++ b/j2k/src/org/jetbrains/jet/j2k/ast/DummyStringExpression.java
+@@ -0,0 +1,20 @@
++package org.jetbrains.jet.j2k.ast;
++
++import org.jetbrains.annotations.NotNull;
++
++/**
++ * @author ignatov
++ */
++public class DummyStringExpression extends Expression {
++  private final String myString;
++
++  public DummyStringExpression(String string) {
++    myString = string;
++  }
++
++  @NotNull
++  @Override
++  public String toKotlin() {
++    return myString;
 +  }
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/DummyStringStatement.java b/j2k/src/org/jetbrains/jet/j2k/ast/DummyStringStatement.java
@@ -2301,10 +2719,10 @@ index 0000000..8c2bbde
 \ No newline at end of file
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/File.java b/j2k/src/org/jetbrains/jet/j2k/ast/File.java
 new file mode 100644
-index 0000000..d65a160
+index 0000000..0dd63fa
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/File.java
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,33 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -2319,20 +2737,22 @@ index 0000000..d65a160
 +  private final String myPackageName;
 +  private final List<Import> myImports;
 +  private final List<Class> myClasses;
++  private final String myMainFunction;
 +
-+  public File(String packageName, List<Import> imports, List<Class> classes) {
++  public File(String packageName, List<Import> imports, List<Class> classes, String mainFunction) {
 +    myPackageName = packageName;
 +    myImports = imports;
 +    myClasses = classes;
++    myMainFunction = mainFunction;
 +  }
 +
 +  @NotNull
 +  @Override
 +  public String toKotlin() {
-+    final String common = AstUtil.joinNodes(myImports, N) + N2 + AstUtil.joinNodes(myClasses, N) + N;
++    final String common = AstUtil.joinNodes(myImports, N) + N2 + AstUtil.joinNodes(myClasses, N) + N + myMainFunction;
 +    if (myPackageName.isEmpty())
 +      return common;
-+    return "namespace" + SPACE + myPackageName + N +
++    return "package" + SPACE + myPackageName + N +
 +      common;
 +  }
 +}
@@ -2512,7 +2932,7 @@ index 0000000..91c1b91
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/IMember.java b/j2k/src/org/jetbrains/jet/j2k/ast/IMember.java
 new file mode 100644
-index 0000000..9c3b406
+index 0000000..3ac5ac6
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/IMember.java
 @@ -0,0 +1,10 @@
@@ -2522,13 +2942,13 @@ index 0000000..9c3b406
 + * @author ignatov
 + */
 +public interface IMember extends INode {
-+  public boolean isStatic();
++  boolean isStatic();
 +
 +  boolean isAbstract();
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/INode.java b/j2k/src/org/jetbrains/jet/j2k/ast/INode.java
 new file mode 100644
-index 0000000..d40f7b5
+index 0000000..d4c23a7
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/INode.java
 @@ -0,0 +1,18 @@
@@ -2541,21 +2961,21 @@ index 0000000..d40f7b5
 + */
 +public interface INode {
 +  @NotNull
-+  public String toKotlin();
++  String toKotlin();
 +
 +  @NotNull
-+  public Kind getKind();
++  Kind getKind();
 +
-+  public enum Kind {
-+    UNDEFINED, TYPE, CONSTRUCTOR, BREAK, CONTINUE, VARARG, TRAIT, ASSIGNMENT_EXPRESSION, CALL_CHAIN, LITERAL,
++  enum Kind {
++    UNDEFINED, TYPE, CONSTRUCTOR, BREAK, CONTINUE, VARARG, TRAIT, ASSIGNMENT_EXPRESSION, CALL_CHAIN, LITERAL, ARRAY_TYPE,
 +  }
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Identifier.java b/j2k/src/org/jetbrains/jet/j2k/ast/Identifier.java
 new file mode 100644
-index 0000000..e1b095f
+index 0000000..8191f63
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Identifier.java
-@@ -0,0 +1,13 @@
+@@ -0,0 +1,15 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -2565,16 +2985,18 @@ index 0000000..e1b095f
 + */
 +public interface Identifier extends INode {
 +  @NotNull
-+  public static Identifier EMPTY_IDENTIFIER = new IdentifierImpl("");
++  Identifier EMPTY_IDENTIFIER = new IdentifierImpl("");
 +
-+  public boolean isEmpty();
++  boolean isEmpty();
++
++  String getName();
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/IdentifierImpl.java b/j2k/src/org/jetbrains/jet/j2k/ast/IdentifierImpl.java
 new file mode 100644
-index 0000000..8d01bcd
+index 0000000..6a1b4fb
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/IdentifierImpl.java
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,59 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -2584,7 +3006,6 @@ index 0000000..8d01bcd
 + */
 +public class IdentifierImpl extends Expression implements Identifier {
 +  private final String myName;
-+  private boolean myHasDollar = false;
 +  private boolean myIsNullable = true;
 +  private boolean myQuotingNeeded = true;
 +
@@ -2597,20 +3018,20 @@ index 0000000..8d01bcd
 +    myIsNullable = isNullable;
 +  }
 +
-+  public IdentifierImpl(String name, boolean hasDollar, boolean isNullable) {
++  public IdentifierImpl(String name, boolean isNullable, boolean quotingNeeded) {
 +    myName = name;
-+    myHasDollar = hasDollar;
 +    myIsNullable = isNullable;
-+  }
-+
-+  public IdentifierImpl(String name, boolean hasDollar, boolean isNullable, boolean quotingNeeded) {
-+    this(name, hasDollar,  isNullable);
 +    myQuotingNeeded = quotingNeeded;
 +  }
 +
 +  @Override
 +  public boolean isEmpty() {
 +    return myName.length() == 0;
++  }
++
++  @Override
++  public String getName() {
++    return myName;
 +  }
 +
 +  @NotNull
@@ -2632,8 +3053,6 @@ index 0000000..8d01bcd
 +  @NotNull
 +  @Override
 +  public String toKotlin() {
-+    if (myHasDollar)
-+      return DOLLAR + ifNeedQuote();
 +    return ifNeedQuote();
 +  }
 +}
@@ -2929,7 +3348,7 @@ index 0000000..ade895c
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/MethodCallExpression.java b/j2k/src/org/jetbrains/jet/j2k/ast/MethodCallExpression.java
 new file mode 100644
-index 0000000..5bfc87b
+index 0000000..c8e64c2
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/MethodCallExpression.java
 @@ -0,0 +1,42 @@
@@ -2946,12 +3365,12 @@ index 0000000..5bfc87b
 +public class MethodCallExpression extends Expression {
 +  private final Expression myMethodCall;
 +  private final List<Expression> myArguments;
-+  private List<String> myConversions;
++  private final List<String> myConversions;
 +  private final boolean myIsResultNullable;
 +  private final List<Type> myTypeParameters;
 +
-+  public MethodCallExpression(Expression methodCall, List<Expression> arguments, boolean nullable, List<Type> typeParameters) {
-+    this(methodCall, arguments, AstUtil.createListWithEmptyString(arguments), nullable, typeParameters);
++  public MethodCallExpression(Expression methodCall, List<Expression> arguments, List<Type> typeParameters) {
++    this(methodCall, arguments, AstUtil.createListWithEmptyString(arguments), false, typeParameters);
 +  }
 +
 +  public MethodCallExpression(Expression methodCall, List<Expression> arguments, List<String> conversions, boolean nullable, List<Type> typeParameters) {
@@ -3012,7 +3431,7 @@ index 0000000..8329fcb
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/NewClassExpression.java b/j2k/src/org/jetbrains/jet/j2k/ast/NewClassExpression.java
 new file mode 100644
-index 0000000..24389f2
+index 0000000..35b4d02
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/NewClassExpression.java
 @@ -0,0 +1,46 @@
@@ -3035,7 +3454,7 @@ index 0000000..24389f2
 +  @Nullable
 +  private AnonymousClass myAnonymousClass = null;
 +
-+  public NewClassExpression(Element name, List<Expression> arguments) {
++  private NewClassExpression(Element name, List<Expression> arguments) {
 +    myName = name;
 +    myQualifier = EMPTY_EXPRESSION;
 +    myArguments = arguments;
@@ -3065,10 +3484,10 @@ index 0000000..24389f2
 \ No newline at end of file
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/Node.java b/j2k/src/org/jetbrains/jet/j2k/ast/Node.java
 new file mode 100644
-index 0000000..3d3b934
+index 0000000..7a6de0e
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/Node.java
-@@ -0,0 +1,60 @@
+@@ -0,0 +1,58 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -3117,8 +3536,6 @@ index 0000000..3d3b934
 +  @NotNull
 +  static final String AT = "@";
 +  @NotNull
-+  static final String DOLLAR = "$";
-+  @NotNull
 +  static final String BACKTICK = "`";
 +  @NotNull
 +  static final String QUEST = "?";
@@ -3127,7 +3544,7 @@ index 0000000..3d3b934
 +  @NotNull
 +  static final String STAR = "*";
 +  @NotNull
-+  public static final String ZERO = "0";
++  protected static final String ZERO = "0";
 +}
 \ No newline at end of file
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/OutProjectionType.java b/j2k/src/org/jetbrains/jet/j2k/ast/OutProjectionType.java
@@ -3250,10 +3667,10 @@ index 0000000..8a5ac18
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/PolyadicExpression.java b/j2k/src/org/jetbrains/jet/j2k/ast/PolyadicExpression.java
 new file mode 100644
-index 0000000..f8d1aba
+index 0000000..f587253
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/ast/PolyadicExpression.java
-@@ -0,0 +1,26 @@
+@@ -0,0 +1,29 @@
 +package org.jetbrains.jet.j2k.ast;
 +
 +import org.jetbrains.annotations.NotNull;
@@ -3267,17 +3684,20 @@ index 0000000..f8d1aba
 +public class PolyadicExpression extends Expression {
 +  private final List<Expression> myExpressions;
 +  private final String myToken;
++  private final List<String> myConversions;
 +
-+  public PolyadicExpression(List<Expression> expressions, String token) {
++  public PolyadicExpression(List<Expression> expressions, String token, List<String> conversions) {
 +    super();
 +    myExpressions = expressions;
 +    myToken = token;
++    myConversions = conversions;
 +  }
 +
 +  @NotNull
 +  @Override
 +  public String toKotlin() {
-+    return "(" + AstUtil.joinNodes(myExpressions, SPACE + myToken + SPACE) + ")";
++    List<String> expressionsWithConversions = AstUtil.applyConversions(AstUtil.nodesToKotlin(myExpressions), myConversions);
++    return "(" + AstUtil.join(expressionsWithConversions, SPACE + myToken + SPACE) + ")";
 +  }
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/PostfixOperator.java b/j2k/src/org/jetbrains/jet/j2k/ast/PostfixOperator.java
@@ -3510,6 +3930,98 @@ index 0000000..5793efb
 +    if (myIdentifier.isEmpty())
 +      return "super";
 +    return "super" + AT + myIdentifier.toKotlin();
++  }
++}
+diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/SureCallChainExpression.java b/j2k/src/org/jetbrains/jet/j2k/ast/SureCallChainExpression.java
+new file mode 100644
+index 0000000..f570fcc
+--- /dev/null
++++ b/j2k/src/org/jetbrains/jet/j2k/ast/SureCallChainExpression.java
+@@ -0,0 +1,27 @@
++package org.jetbrains.jet.j2k.ast;
++
++import org.jetbrains.annotations.NotNull;
++
++/**
++ * @author ignatov
++ */
++public class SureCallChainExpression extends Expression {
++  private final Expression myExpression;
++  private final String myConversion;
++
++  public SureCallChainExpression(Expression expression, String conversion) {
++    myExpression = expression;
++    myConversion = conversion;
++  }
++
++  @Override
++  public boolean isEmpty() {
++    return myExpression.isEmpty();
++  }
++
++  @NotNull
++  @Override
++  public String toKotlin() {
++    return myExpression.toKotlin() + myConversion;
++  }
++}
+diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/SwitchContainer.java b/j2k/src/org/jetbrains/jet/j2k/ast/SwitchContainer.java
+new file mode 100644
+index 0000000..363a93b
+--- /dev/null
++++ b/j2k/src/org/jetbrains/jet/j2k/ast/SwitchContainer.java
+@@ -0,0 +1,27 @@
++package org.jetbrains.jet.j2k.ast;
++
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.jet.j2k.util.AstUtil;
++
++import java.util.List;
++
++/**
++ * @author ignatov
++ */
++public class SwitchContainer extends Statement {
++  private final Expression myExpression;
++  private final List<CaseContainer> myCaseContainers;
++
++  public SwitchContainer(final Expression expression, final List<CaseContainer> caseContainers) {
++    myExpression = expression;
++    myCaseContainers = caseContainers;
++  }
++
++  @NotNull
++  @Override
++  public String toKotlin() {
++    return "when" + SPACE + "(" + myExpression.toKotlin() + ")" + SPACE + "{" + N +
++      AstUtil.joinNodes(myCaseContainers, N) + N +
++      "}";
++  }
++}
+diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/SwitchLabelStatement.java b/j2k/src/org/jetbrains/jet/j2k/ast/SwitchLabelStatement.java
+new file mode 100644
+index 0000000..78afed2
+--- /dev/null
++++ b/j2k/src/org/jetbrains/jet/j2k/ast/SwitchLabelStatement.java
+@@ -0,0 +1,20 @@
++package org.jetbrains.jet.j2k.ast;
++
++import org.jetbrains.annotations.NotNull;
++
++/**
++ * @author ignatov
++ */
++public class SwitchLabelStatement extends Statement {
++  private final Expression myExpression;
++
++  public SwitchLabelStatement(final Expression expression) {
++    myExpression = expression;
++  }
++
++  @NotNull
++  @Override
++  public String toKotlin() {
++    return myExpression.toKotlin();
 +  }
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/ast/SynchronizedStatement.java b/j2k/src/org/jetbrains/jet/j2k/ast/SynchronizedStatement.java
@@ -3877,15 +4389,14 @@ index 0000000..8502370
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/util/AstUtil.java b/j2k/src/org/jetbrains/jet/j2k/util/AstUtil.java
 new file mode 100644
-index 0000000..21c991a
+index 0000000..fade672
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/util/AstUtil.java
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,97 @@
 +package org.jetbrains.jet.j2k.util;
 +
 +import org.jetbrains.annotations.NotNull;
 +import org.jetbrains.annotations.Nullable;
-+import org.jetbrains.jet.j2k.ast.Expression;
 +import org.jetbrains.jet.j2k.ast.INode;
 +
 +import java.util.LinkedList;
@@ -3940,10 +4451,10 @@ index 0000000..21c991a
 +  }
 +
 +  @NotNull
-+  public static List<String> createListWithEmptyString(@NotNull final List<Expression> arguments) {
++  public static <T> List<String> createListWithEmptyString(@NotNull final List<T> arguments) {
 +    final List<String> conversions = new LinkedList<String>();
 +    //noinspection UnusedDeclaration
-+    for (Expression argument : arguments) conversions.add("");
++    for (T argument : arguments) conversions.add("");
 +    return conversions;
 +  }
 +
@@ -3965,15 +4476,85 @@ index 0000000..21c991a
 +      return "(" + f + ")" + s;
 +  }
 +
-+  public static <T> T getOrElse(@NotNull Map<T, T> map, T e, T orElse) {
++  @NotNull
++  public static <T> T getOrElse(@NotNull Map<T, T> map, @NotNull T e, @NotNull T orElse) {
 +    if (map.containsKey(e))
 +      return map.get(e);
 +    return orElse;
 +  }
++
++  @NotNull
++  public static String replaceLastQuest(@NotNull String str) {
++    if (str.endsWith("?"))
++      return str.substring(0, str.length() - 1);
++    return str;
++  }
++}
+diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/ClassVisitor.java b/j2k/src/org/jetbrains/jet/j2k/visitors/ClassVisitor.java
+new file mode 100644
+index 0000000..f604447
+--- /dev/null
++++ b/j2k/src/org/jetbrains/jet/j2k/visitors/ClassVisitor.java
+@@ -0,0 +1,30 @@
++package org.jetbrains.jet.j2k.visitors;
++
++import com.intellij.psi.JavaRecursiveElementVisitor;
++import com.intellij.psi.PsiClass;
++import org.jetbrains.annotations.NotNull;
++
++import java.util.HashSet;
++import java.util.Set;
++
++/**
++ * @author ignatov
++ */
++public class ClassVisitor extends JavaRecursiveElementVisitor {
++  private final Set<String> myClassIdentifiers;
++
++  public ClassVisitor() {
++    myClassIdentifiers = new HashSet<String>();
++  }
++
++  @NotNull
++  public Set<String> getClassIdentifiers() {
++    return new HashSet<String>(myClassIdentifiers);
++  }
++
++  @Override
++  public void visitClass(@NotNull PsiClass aClass) {
++    myClassIdentifiers.add(aClass.getQualifiedName());
++    super.visitClass(aClass);
++  }
++}
+diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/Dispatcher.java b/j2k/src/org/jetbrains/jet/j2k/visitors/Dispatcher.java
+new file mode 100644
+index 0000000..1bab193
+--- /dev/null
++++ b/j2k/src/org/jetbrains/jet/j2k/visitors/Dispatcher.java
+@@ -0,0 +1,20 @@
++package org.jetbrains.jet.j2k.visitors;
++
++/**
++ * @author ignatov
++ */
++public class Dispatcher {
++  private ExpressionVisitor myExpressionVisitor;
++
++  public void setExpressionVisitor(final ExpressionVisitor expressionVisitor) {
++    this.myExpressionVisitor = expressionVisitor;
++  }
++
++  public Dispatcher() {
++    myExpressionVisitor = new ExpressionVisitor();
++  }
++
++  public ExpressionVisitor getExpressionVisitor() {
++    return myExpressionVisitor;
++  }
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/ElementVisitor.java b/j2k/src/org/jetbrains/jet/j2k/visitors/ElementVisitor.java
 new file mode 100644
-index 0000000..4a39cf5
+index 0000000..c9fd52f
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/visitors/ElementVisitor.java
 @@ -0,0 +1,93 @@
@@ -3996,7 +4577,7 @@ index 0000000..4a39cf5
 +  @Nullable
 +  private Element myResult = Element.EMPTY_ELEMENT;
 +
-+  @NotNull
++  @Nullable
 +  public Element getResult() {
 +    return myResult;
 +  }
@@ -4009,7 +4590,7 @@ index 0000000..4a39cf5
 +      new IdentifierImpl(variable.getName()), // TODO
 +      modifiersListToModifiersSet(variable.getModifierList()),
 +      typeToType(variable.getType(), Converter.isNotNull(variable.getModifierList())),
-+      expressionToExpression(variable.getInitializer())
++      createSureCallOnlyForChain(variable.getInitializer(), variable.getType())
 +    );
 +  }
 +
@@ -4073,29 +4654,29 @@ index 0000000..4a39cf5
 \ No newline at end of file
 diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/ExpressionVisitor.java b/j2k/src/org/jetbrains/jet/j2k/visitors/ExpressionVisitor.java
 new file mode 100644
-index 0000000..ce61907
+index 0000000..ff754c1
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/visitors/ExpressionVisitor.java
-@@ -0,0 +1,545 @@
+@@ -0,0 +1,457 @@
 +package org.jetbrains.jet.j2k.visitors;
 +
 +import com.intellij.psi.*;
 +import com.intellij.psi.tree.IElementType;
 +import org.jetbrains.annotations.NotNull;
 +import org.jetbrains.annotations.Nullable;
-+import org.jetbrains.jet.j2k.Converter;
 +import org.jetbrains.jet.j2k.ast.*;
-+import org.jetbrains.jet.j2k.util.AstUtil;
 +
-+import java.util.*;
++import java.util.Collections;
++import java.util.List;
 +
 +import static org.jetbrains.jet.j2k.Converter.*;
++import static org.jetbrains.jet.j2k.visitors.TypeVisitor.*;
 +
 +/**
 + * @author ignatov
 + */
 +public class ExpressionVisitor extends StatementVisitor {
-+  @Nullable
++  @NotNull
 +  Expression myResult = Expression.EMPTY_EXPRESSION;
 +
 +  @Override
@@ -4204,7 +4785,8 @@ index 0000000..ce61907
 +        new BinaryExpression(
 +          expressionToExpression(expression.getLOperand()),
 +          expressionToExpression(expression.getROperand()),
-+          getOperatorString(expression.getOperationSign().getTokenType())
++          getOperatorString(expression.getOperationSign().getTokenType()),
++          createConversions(expression, PsiType.BOOLEAN)
 +        );
 +  }
 +
@@ -4217,9 +4799,14 @@ index 0000000..ce61907
 +  @Override
 +  public void visitConditionalExpression(@NotNull PsiConditionalExpression expression) {
 +    super.visitConditionalExpression(expression);
++    PsiExpression condition = expression.getCondition();
++    PsiType type = condition.getType();
++    Expression e = type != null ?
++      createSureCallOnlyForChain(condition, type) :
++      expressionToExpression(condition);
 +    myResult = new ParenthesizedExpression(
 +      new IfStatement(
-+        expressionToExpression(expression.getCondition()),
++        e,
 +        expressionToExpression(expression.getThenExpression()),
 +        expressionToExpression(expression.getElseExpression())
 +      )
@@ -4251,21 +4838,21 @@ index 0000000..ce61907
 +    final PsiType type = expression.getType();
 +    if (type != null) {
 +      String canonicalTypeStr = type.getCanonicalText();
-+      if (canonicalTypeStr.equals("double") || canonicalTypeStr.equals("java.lang.Double"))
++      if (canonicalTypeStr.equals("double") || canonicalTypeStr.equals(JAVA_LANG_DOUBLE))
 +        text = text.replace("D", "").replace("d", "");
-+      if (canonicalTypeStr.equals("float") || canonicalTypeStr.equals("java.lang.Float"))
++      if (canonicalTypeStr.equals("float") || canonicalTypeStr.equals(JAVA_LANG_FLOAT))
 +        text = text.replace("F", "").replace("f", "") + "." + "flt";
-+      if (canonicalTypeStr.equals("long") || canonicalTypeStr.equals("java.lang.Long"))
++      if (canonicalTypeStr.equals("long") || canonicalTypeStr.equals(JAVA_LANG_LONG))
 +        text = text.replace("L", "").replace("l", "");
-+      if (canonicalTypeStr.equals("int") || canonicalTypeStr.equals("java.lang.Integer")) // need for hex support
++      if (canonicalTypeStr.equals("int") || canonicalTypeStr.equals(JAVA_LANG_INTEGER)) // need for hex support
 +        text = value != null ? value.toString() : text;
 +
-+      if (canonicalTypeStr.equals("java.lang.String"))
++      if (canonicalTypeStr.equals(JAVA_LANG_STRING))
 +        isQuotingNeeded = false;
-+      if (canonicalTypeStr.equals("char") || canonicalTypeStr.equals("java.lang.Character"))
++      if (canonicalTypeStr.equals("char") || canonicalTypeStr.equals(JAVA_LANG_CHARACTER))
 +        isQuotingNeeded = false;
 +    }
-+    myResult = new LiteralExpression(new IdentifierImpl(text, false, false, isQuotingNeeded));
++    myResult = new LiteralExpression(new IdentifierImpl(text, false, isQuotingNeeded));
 +  }
 +
 +  @Override
@@ -4283,92 +4870,6 @@ index 0000000..ce61907
 +    }
 +  }
 +
-+  @NotNull
-+  private static List<String> createConversions(@NotNull PsiCallExpression expression) {
-+    List<String> conversions = new LinkedList<String>();
-+    PsiExpressionList argumentList = expression.getArgumentList();
-+    PsiExpression[] arguments = argumentList != null ? argumentList.getExpressions() : new PsiExpression[]{};
-+    //noinspection UnusedDeclaration
-+    for (final PsiExpression a : arguments) {
-+      conversions.add("");
-+    }
-+
-+    PsiMethod resolve = expression.resolveMethod();
-+    if (resolve != null) {
-+      List<PsiType> expectedTypes = new LinkedList<PsiType>();
-+      List<PsiType> actualTypes = new LinkedList<PsiType>();
-+
-+      for (PsiParameter p : resolve.getParameterList().getParameters())
-+        expectedTypes.add(p.getType());
-+
-+      for (PsiExpression e : arguments)
-+        actualTypes.add(e.getType());
-+
-+      assert actualTypes.size() == expectedTypes.size() : "The type list must have the same length";
-+
-+      for (int i = 0; i < actualTypes.size(); i++) {
-+        PsiType actual = actualTypes.get(i);
-+        PsiType expected = expectedTypes.get(i);
-+        PsiExpression argument = arguments[i];
-+
-+        String conversion = "";
-+        if (isConversionNeeded(actual, expected))
-+          conversion += getPrimitiveTypeConversion(expected.getCanonicalText());
-+
-+        PsiType type = argument.getType();
-+        if (argument instanceof PsiReferenceExpression &&
-+          type != null && Node.PRIMITIVE_TYPES.contains(type.getCanonicalText()) &&
-+          ((PsiReferenceExpression) argument).isQualified())
-+          conversion += ".sure()";
-+
-+        conversions.set(i, conversion);
-+      }
-+    }
-+    return conversions;
-+  }
-+
-+  static boolean isConversionNeeded(@Nullable final PsiType actual, @Nullable final PsiType expected) {
-+    if (actual == null || expected == null)
-+      return false;
-+    Map<String, String> typeMap = new HashMap<String, String>();
-+    typeMap.put("java.lang.Byte", "byte");
-+    typeMap.put("java.lang.Short", "short");
-+    typeMap.put("java.lang.Integer", "int");
-+    typeMap.put("java.lang.Long", "long");
-+    typeMap.put("java.lang.Float", "float");
-+    typeMap.put("java.lang.Double", "double");
-+    typeMap.put("java.lang.Character", "char");
-+    String expectedStr = expected.getCanonicalText();
-+    String actualStr = actual.getCanonicalText();
-+    boolean o1 = AstUtil.getOrElse(typeMap, actualStr, "").equals(expectedStr);
-+    boolean o2 = AstUtil.getOrElse(typeMap, expectedStr, "").equals(actualStr);
-+    return !actualStr.equals(expectedStr) && (!(o1 ^ o2));
-+  }
-+
-+  @NotNull
-+  static String getPrimitiveTypeConversion(@NotNull String type) {
-+    Map<String, String> conversions = new HashMap<String, String>();
-+    conversions.put("byte", "byt");
-+    conversions.put("short", "sht");
-+    conversions.put("int", "int");
-+    conversions.put("long", "lng");
-+    conversions.put("float", "flt");
-+    conversions.put("double", "dbl");
-+    conversions.put("char", "chr");
-+
-+    conversions.put("java.lang.Byte", "byt");
-+    conversions.put("java.lang.Short", "sht");
-+    conversions.put("java.lang.Integer", "int");
-+    conversions.put("java.lang.Long", "lng");
-+    conversions.put("java.lang.Float", "flt");
-+    conversions.put("java.lang.Double", "dbl");
-+    conversions.put("java.lang.Character", "chr");
-+
-+    if (conversions.containsKey(type))
-+      return "." + conversions.get(type);
-+    return "";
-+  }
-+
 +  @Override
 +  public void visitCallExpression(PsiCallExpression callExpression) {
 +    super.visitCallExpression(callExpression);
@@ -4377,11 +4878,10 @@ index 0000000..ce61907
 +  @Override
 +  public void visitNewExpression(@NotNull PsiNewExpression expression) {
 +    super.visitNewExpression(expression);
-+
-+    if (expression.getArrayInitializer() != null) // new Foo[] {}
++    if (expression.getArrayInitializer() != null) // new Foo[] {Foo(1), Foo(2)}
 +      myResult = createNewEmptyArray(expression);
 +    else if (expression.getArrayDimensions().length > 0) { // new Foo[5]
-+      myResult = createNewNonEmptyArray(expression);
++      myResult = createNewEmptyArrayWithoutInitialization(expression);
 +    } else { // new Class(): common case
 +      myResult = createNewClassExpression(expression);
 +    }
@@ -4392,7 +4892,7 @@ index 0000000..ce61907
 +    final PsiAnonymousClass anonymousClass = expression.getAnonymousClass();
 +    final PsiMethod constructor = expression.resolveMethod();
 +    PsiJavaCodeReferenceElement classReference = expression.getClassOrAnonymousClassReference();
-+    final boolean isNotConvertedClass = classReference != null && !Converter.getClassIdentifiers().contains(classReference.getQualifiedName());
++    final boolean isNotConvertedClass = classReference != null && !getClassIdentifiers().contains(classReference.getQualifiedName());
 +    PsiExpressionList argumentList = expression.getArgumentList();
 +    PsiExpression[] arguments = argumentList != null ? argumentList.getExpressions() : new PsiExpression[]{};
 +    if (constructor == null || isConstructorPrimary(constructor) || isNotConvertedClass) {
@@ -4412,17 +4912,14 @@ index 0000000..ce61907
 +      new MethodCallExpression(
 +        new IdentifierImpl("init"),
 +        expressionsToExpressionList(arguments),
-+        false,
 +        typeParameters));
 +  }
 +
 +  @NotNull
-+  private static NewClassExpression createNewNonEmptyArray(@NotNull PsiNewExpression expression) {
-+    final List<Expression> callExpression = expressionsToExpressionList(expression.getArrayDimensions());
-+    callExpression.add(new IdentifierImpl("{null}")); // TODO: remove
-+    return new NewClassExpression(
-+      typeToType(expression.getType()),
-+      callExpression
++  private static Expression createNewEmptyArrayWithoutInitialization(@NotNull PsiNewExpression expression) {
++    return new ArrayWithoutInitializationExpression(
++      typeToType(expression.getType(), true),
++      expressionsToExpressionList(expression.getArrayDimensions())
 +    );
 +  }
 +
@@ -4467,7 +4964,6 @@ index 0000000..ce61907
 +    super.visitReferenceExpression(expression);
 +
 +    final boolean isFieldReference = isFieldReference(expression, getContainingClass(expression));
-+    final boolean hasDollar = isFieldReference && isInsidePrimaryConstructor(expression);
 +    final boolean insideSecondaryConstructor = isInsideSecondaryConstructor(expression);
 +    final boolean hasReceiver = isFieldReference && insideSecondaryConstructor;
 +    final boolean isThis = isThisExpression(expression);
@@ -4476,15 +4972,11 @@ index 0000000..ce61907
 +
 +    Expression identifier = new IdentifierImpl(expression.getReferenceName(), isNullable);
 +
-+    if (hasDollar)
-+      identifier = new IdentifierImpl(expression.getReferenceName(), hasDollar, isNullable);
-+    else {
-+      final String temporaryObject = "__";
-+      if (hasReceiver)
-+        identifier = new CallChainExpression(new IdentifierImpl(temporaryObject, false), new IdentifierImpl(expression.getReferenceName(), isNullable));
-+      else if (insideSecondaryConstructor && isThis)
-+        identifier = new IdentifierImpl("val " + temporaryObject + " = " + className); // TODO: hack
-+    }
++    final String __ = "__";
++    if (hasReceiver)
++      identifier = new CallChainExpression(new IdentifierImpl(__, false), new IdentifierImpl(expression.getReferenceName(), isNullable));
++    else if (insideSecondaryConstructor && isThis)
++      identifier = new IdentifierImpl("val __ = " + className); // TODO: hack
 +
 +    myResult = new CallChainExpression(
 +      expressionToExpression(expression.getQualifierExpression()),
@@ -4493,7 +4985,7 @@ index 0000000..ce61907
 +  }
 +
 +  @NotNull
-+  static String getClassNameWithConstructor(@NotNull PsiReferenceExpression expression) {
++  private static String getClassNameWithConstructor(@NotNull PsiReferenceExpression expression) {
 +    PsiElement context = expression.getContext();
 +    while (context != null) {
 +      if (context instanceof PsiMethod && ((PsiMethod) context).isConstructor()) {
@@ -4618,17 +5110,69 @@ index 0000000..ce61907
 +    super.visitPolyadicExpression(expression);
 +    myResult = new PolyadicExpression(
 +      expressionsToExpressionList(expression.getOperands()),
-+      getOperatorString(expression.getOperationTokenType())
++      getOperatorString(expression.getOperationTokenType()),
++      createConversions(expression, PsiType.BOOLEAN)
 +    );
 +  }
 +}
 \ No newline at end of file
+diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/ExpressionVisitorForDirectObjectInheritors.java b/j2k/src/org/jetbrains/jet/j2k/visitors/ExpressionVisitorForDirectObjectInheritors.java
+new file mode 100644
+index 0000000..1f184e1
+--- /dev/null
++++ b/j2k/src/org/jetbrains/jet/j2k/visitors/ExpressionVisitorForDirectObjectInheritors.java
+@@ -0,0 +1,45 @@
++package org.jetbrains.jet.j2k.visitors;
++
++import com.intellij.psi.*;
++import org.jetbrains.annotations.NotNull;
++import org.jetbrains.jet.j2k.Converter;
++import org.jetbrains.jet.j2k.ast.DummyMethodCallExpression;
++import org.jetbrains.jet.j2k.ast.DummyStringExpression;
++import org.jetbrains.jet.j2k.ast.IdentifierImpl;
++
++import static org.jetbrains.jet.j2k.visitors.TypeVisitor.JAVA_LANG_OBJECT;
++
++/**
++ * @author ignatov
++ */
++public class ExpressionVisitorForDirectObjectInheritors extends ExpressionVisitor {
++  @Override
++  public void visitMethodCallExpression(@NotNull final PsiMethodCallExpression expression) {
++    if (superMethodInvocation(expression.getMethodExpression(), "hashCode"))
++      myResult = new DummyMethodCallExpression(new IdentifierImpl("System"), "identityHashCode", new IdentifierImpl("this"));
++    else if (superMethodInvocation(expression.getMethodExpression(), "equals"))
++      myResult = new DummyMethodCallExpression(new IdentifierImpl("this"), "identityEquals", Converter.elementToElement(expression.getArgumentList()));
++    else if (superMethodInvocation(expression.getMethodExpression(), "toString"))
++      myResult = new DummyStringExpression(String.format("getJavaClass<%s>.getName() + '@' + Integer.toHexString(hashCode())", getClassName(expression.getMethodExpression())));
++    else
++      super.visitMethodCallExpression(expression);
++  }
++
++  @Override
++  public void visitReferenceExpression(@NotNull final PsiReferenceExpression expression) {
++    super.visitReferenceExpression(expression);
++  }
++
++  private static boolean superMethodInvocation(@NotNull final PsiReferenceExpression expression, final String methodName) {
++    String referenceName = expression.getReferenceName();
++    PsiExpression qualifierExpression = expression.getQualifierExpression();
++    if (referenceName != null && referenceName.equals(methodName)) {
++      if (qualifierExpression instanceof PsiSuperExpression) {
++        PsiType type = qualifierExpression.getType();
++        if (type != null && type.getCanonicalText().equals(JAVA_LANG_OBJECT))
++          return true;
++      }
++    }
++    return false;
++  }
++}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/StatementVisitor.java b/j2k/src/org/jetbrains/jet/j2k/visitors/StatementVisitor.java
 new file mode 100644
-index 0000000..07b4689
+index 0000000..57d9069
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/visitors/StatementVisitor.java
-@@ -0,0 +1,351 @@
+@@ -0,0 +1,361 @@
 +package org.jetbrains.jet.j2k.visitors;
 +
 +import com.intellij.psi.*;
@@ -4646,8 +5190,6 @@ index 0000000..07b4689
 +import java.util.List;
 +
 +import static org.jetbrains.jet.j2k.Converter.*;
-+import static org.jetbrains.jet.j2k.visitors.ExpressionVisitor.getPrimitiveTypeConversion;
-+import static org.jetbrains.jet.j2k.visitors.ExpressionVisitor.isConversionNeeded;
 +
 +/**
 + * @author ignatov
@@ -4712,8 +5254,13 @@ index 0000000..07b4689
 +  @Override
 +  public void visitDoWhileStatement(@NotNull PsiDoWhileStatement statement) {
 +    super.visitDoWhileStatement(statement);
++    PsiExpression condition = statement.getCondition();
++    @SuppressWarnings("ConstantConditions")
++    Expression expression = condition != null && condition.getType() != null ?
++      createSureCallOnlyForChain(condition, condition.getType()) :
++      expressionToExpression(condition);
 +    myResult = new DoWhileStatement(
-+      expressionToExpression(statement.getCondition()),
++      expression,
 +      statementToStatement(statement.getBody())
 +    );
 +  }
@@ -4807,8 +5354,13 @@ index 0000000..07b4689
 +  @Override
 +  public void visitIfStatement(@NotNull PsiIfStatement statement) {
 +    super.visitIfStatement(statement);
++    PsiExpression condition = statement.getCondition();
++    @SuppressWarnings("ConstantConditions")
++    Expression expression = condition != null && condition.getType() != null ?
++      createSureCallOnlyForChain(condition, condition.getType()) :
++      expressionToExpression(condition);
 +    myResult = new IfStatement(
-+      expressionToExpression(statement.getCondition()),
++      expression,
 +      statementToStatement(statement.getThenBranch()),
 +      statementToStatement(statement.getElseBranch())
 +    );
@@ -4958,8 +5510,13 @@ index 0000000..07b4689
 +  @Override
 +  public void visitWhileStatement(@NotNull PsiWhileStatement statement) {
 +    super.visitWhileStatement(statement);
++    PsiExpression condition = statement.getCondition();
++    @SuppressWarnings("ConstantConditions")
++    Expression expression = condition != null && condition.getType() != null ?
++      createSureCallOnlyForChain(condition, condition.getType()) :
++      expressionToExpression(condition);
 +    myResult = new WhileStatement(
-+      expressionToExpression(statement.getCondition()),
++      expression,
 +      statementToStatement(statement.getBody())
 +    );
 +  }
@@ -4968,15 +5525,12 @@ index 0000000..07b4689
 +  public void visitReturnStatement(@NotNull PsiReturnStatement statement) {
 +    super.visitReturnStatement(statement);
 +    PsiExpression returnValue = statement.getReturnValue();
-+    String conversion = "";
-+
 +    PsiType methodReturnType = Converter.getMethodReturnType();
-+    if (returnValue != null && methodReturnType != null && isConversionNeeded(returnValue.getType(), methodReturnType)) {
-+      conversion = getPrimitiveTypeConversion(methodReturnType.getCanonicalText());
-+    }
++    Expression expression = returnValue != null && methodReturnType != null ?
++      createSureCallOnlyForChain(returnValue, methodReturnType) :
++      expressionToExpression(returnValue);
 +    myResult = new ReturnStatement(
-+      expressionToExpression(returnValue),
-+      conversion
++      expression
 +    );
 +  }
 +}
@@ -5072,10 +5626,10 @@ index 0000000..c077ced
 +}
 diff --git a/j2k/src/org/jetbrains/jet/j2k/visitors/TypeVisitor.java b/j2k/src/org/jetbrains/jet/j2k/visitors/TypeVisitor.java
 new file mode 100644
-index 0000000..a24aa10
+index 0000000..acaa8c6
 --- /dev/null
 +++ b/j2k/src/org/jetbrains/jet/j2k/visitors/TypeVisitor.java
-@@ -0,0 +1,157 @@
+@@ -0,0 +1,168 @@
 +package org.jetbrains.jet.j2k.visitors;
 +
 +import com.intellij.psi.*;
@@ -5084,7 +5638,6 @@ index 0000000..a24aa10
 +import org.jetbrains.jet.j2k.ast.*;
 +import org.jetbrains.jet.j2k.util.AstUtil;
 +
-+import java.util.Iterator;
 +import java.util.LinkedList;
 +import java.util.List;
 +
@@ -5095,6 +5648,18 @@ index 0000000..a24aa10
 + * @author ignatov
 + */
 +public class TypeVisitor extends PsiTypeVisitor<Type> {
++  public static final String JAVA_LANG_BYTE = "java.lang.Byte";
++  public static final String JAVA_LANG_CHARACTER = "java.lang.Character";
++  public static final String JAVA_LANG_DOUBLE = "java.lang.Double";
++  public static final String JAVA_LANG_FLOAT = "java.lang.Float";
++  public static final String JAVA_LANG_INTEGER = "java.lang.Integer";
++  public static final String JAVA_LANG_LONG = "java.lang.Long";
++  public static final String JAVA_LANG_SHORT = "java.lang.Short";
++  private static final String JAVA_LANG_BOOLEAN = "java.lang.Boolean";
++  public static final String JAVA_LANG_OBJECT = "java.lang.Object";
++  public static final String JAVA_LANG_STRING = "java.lang.String";
++  private static final String JAVA_LANG_ITERABLE = "java.lang.Iterable";
++  private static final String JAVA_UTIL_ITERATOR = "java.util.Iterator";
 +  private Type myResult = Type.EMPTY_TYPE;
 +
 +  @NotNull
@@ -5141,10 +5706,10 @@ index 0000000..a24aa10
 +    if (psiClass != null) {
 +      String qualifiedName = psiClass.getQualifiedName();
 +      if (qualifiedName != null) {
-+        if (qualifiedName.equals("java.lang.Iterable"))
-+          return new IdentifierImpl("java.lang.Iterable");
-+        if (qualifiedName.equals("java.util.Iterator"))
-+          return new IdentifierImpl("java.util.Iterator");
++        if (qualifiedName.equals(JAVA_LANG_ITERABLE))
++          return new IdentifierImpl(JAVA_LANG_ITERABLE);
++        if (qualifiedName.equals(JAVA_UTIL_ITERATOR))
++          return new IdentifierImpl(JAVA_UTIL_ITERATOR);
 +      }
 +    }
 +    final String classTypeName = createQualifiedName(classType);
@@ -5193,15 +5758,15 @@ index 0000000..a24aa10
 +  @NotNull
 +  private static String getClassTypeName(@NotNull PsiClassType classType) {
 +    String canonicalTypeStr = classType.getCanonicalText();
-+    if (canonicalTypeStr.equals("java.lang.Object")) return "Any";
-+    if (canonicalTypeStr.equals("java.lang.Byte")) return "Byte";
-+    if (canonicalTypeStr.equals("java.lang.Character")) return "Char";
-+    if (canonicalTypeStr.equals("java.lang.Double")) return "Double";
-+    if (canonicalTypeStr.equals("java.lang.Float")) return "Float";
-+    if (canonicalTypeStr.equals("java.lang.Integer")) return "Int";
-+    if (canonicalTypeStr.equals("java.lang.Long")) return "Long";
-+    if (canonicalTypeStr.equals("java.lang.Short")) return "Short";
-+    if (canonicalTypeStr.equals("java.lang.Boolean")) return "Boolean";
++    if (canonicalTypeStr.equals(JAVA_LANG_OBJECT)) return "Any";
++    if (canonicalTypeStr.equals(JAVA_LANG_BYTE)) return "Byte";
++    if (canonicalTypeStr.equals(JAVA_LANG_CHARACTER)) return "Char";
++    if (canonicalTypeStr.equals(JAVA_LANG_DOUBLE)) return "Double";
++    if (canonicalTypeStr.equals(JAVA_LANG_FLOAT)) return "Float";
++    if (canonicalTypeStr.equals(JAVA_LANG_INTEGER)) return "Int";
++    if (canonicalTypeStr.equals(JAVA_LANG_LONG)) return "Long";
++    if (canonicalTypeStr.equals(JAVA_LANG_SHORT)) return "Short";
++    if (canonicalTypeStr.equals(JAVA_LANG_BOOLEAN)) return "Boolean";
 +    return classType.getClassName() != null ? classType.getClassName() : classType.getCanonicalText();
 +  }
 +
