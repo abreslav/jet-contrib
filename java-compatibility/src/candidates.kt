@@ -10,10 +10,11 @@ fun getJavaClass<T>() : java.lang.Class<T> {
 
 fun assert(condition : Boolean, message : () -> String) = if (condition) System.err?.println("Assert: " + message())
 
+// Any
+fun Any.getClass() = (this as java.lang.Object).getClass()
+
 // String
-fun <T> T.plus(str: String) : String {
-    return this.toString() + str
-}
+inline fun <T> T.plus(str: String) = this.toString() + str
 
 inline fun doubleArray(size : Int, init : (Int) -> Double) : DoubleArray {
     val result = DoubleArray(size)
