@@ -1,4 +1,4 @@
-namespace std.compatibility
+package std.compatibility
 
 // Array
 val <T> Array<T>?.length : Int get() = this.sure().size
