@@ -1,4 +1,4 @@
-namespace std.compatibility
+package std.compatibility
 
 // Array
 val <T> Array<T>?.length : Int get() = this.sure().size
@@ -522,3 +522,32 @@ fun Long.and(other : Byte)  = this.and(other.lng)
 fun Long.and(other : Short) = this.and(other.lng)
 fun Long.and(other : Int)   = this.and(other.lng)
 fun Long.and(other : Char)  = this.and(other.lng)
+
+// String
+inline fun String.lastIndexOf(s: String?)  = (this as java.lang.String).lastIndexOf(s)
+
+inline fun String.indexOf(s : String?) = (this as java.lang.String).indexOf(s)
+
+inline fun String.indexOf(p0 : String?, p1 : Int) = (this as java.lang.String).indexOf(p0, p1)
+
+inline fun String.replaceAll(s: String?, s1 : String?) = (this as java.lang.String).replaceAll(s, s1).sure()
+
+inline fun String.split(s : String?)  = (this as java.lang.String).split(s)
+
+inline fun String(bytes : ByteArray?, i : Int, i1 : Int, s : String?) = java.lang.String(bytes, i, i1, s) as String
+
+inline fun String(bytes : ByteArray?, i : Int, i1 : Int, charset : java.nio.charset.Charset?) = java.lang.String(bytes, i, i1, charset) as String
+
+inline fun String(bytes : ByteArray?, s : String?) = java.lang.String(bytes, s) as String
+
+inline fun String(bytes : ByteArray?, charset : java.nio.charset.Charset?) = java.lang.String(bytes, charset) as String
+
+inline fun String(bytes : ByteArray?, i : Int, i1 : Int) = java.lang.String(bytes, i, i1) as String
+
+inline fun String(bytes : ByteArray?) = java.lang.String(bytes) as String
+
+inline fun String(chars : CharArray?) = java.lang.String(chars) as String
+
+inline fun String(stringBuffer : java.lang.StringBuffer?) = java.lang.String(stringBuffer) as String
+
+inline fun String(stringBuilder : java.lang.StringBuilder?) = java.lang.String(stringBuilder) as String

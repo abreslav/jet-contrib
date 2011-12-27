@@ -14,6 +14,7 @@ import org.jetbrains.jet.j2k.visitors.*;
 
 import java.util.*;
 
+import static org.jetbrains.jet.j2k.ConverterUtil.createMainFunction;
 import static org.jetbrains.jet.j2k.visitors.TypeVisitor.*;
 
 /**
@@ -58,18 +59,21 @@ public class Converter {
 
   @NotNull
   public static File fileToFile(@NotNull PsiJavaFile javaFile) {
-    final PsiImportList importList = javaFile.getImportList();
-    List<Import> imports = importList == null ? Collections.<Import>emptyList() : importsToImportList(importList.getAllImportStatements());
-    return new File(quoteKeywords(javaFile.getPackageName()), imports, classesToClassList(javaFile.getClasses()));
+    return fileToFile(javaFile, Collections.<String>emptyList());
   }
 
   @NotNull
   public static File fileToFileWithCompatibilityImport(@NotNull PsiJavaFile javaFile) {
+    return fileToFile(javaFile, Collections.singletonList("std.compatibility.*"));
+  }
+
+  @NotNull
+  private static File fileToFile(PsiJavaFile javaFile, List<String> additionalImports) {
     final PsiImportList importList = javaFile.getImportList();
     List<Import> imports = importList == null ? Collections.<Import>emptyList() : importsToImportList(importList.getAllImportStatements());
-    imports.add(new Import("std.*"));
-    imports.add(new Import("std.compatibility.*"));
-    return new File(quoteKeywords(javaFile.getPackageName()), imports, classesToClassList(javaFile.getClasses()));
+    for (String i : additionalImports)
+      imports.add(new Import(i));
+    return new File(quoteKeywords(javaFile.getPackageName()), imports, classesToClassList(javaFile.getClasses()), createMainFunction(javaFile));
   }
 
   @NotNull
@@ -563,10 +567,13 @@ public class Converter {
   }
 
   private static boolean isReadOnly(@NotNull PsiParameter parameter) {
-    for (PsiReference r : (ReferencesSearch.search(parameter))) {
-      if (r instanceof PsiExpression && PsiUtil.isAccessedForWriting((PsiExpression) r)) {
-        return false;
+    try {
+      for (PsiReference r : (ReferencesSearch.search(parameter))) {
+        if (r instanceof PsiExpression && PsiUtil.isAccessedForWriting((PsiExpression) r)) {
+          return false;
+        }
       }
+    } catch (IllegalArgumentException ignored) {
     }
     return true;
   }
@@ -594,9 +601,9 @@ public class Converter {
 
   @NotNull
   public static List<String> createConversions(@NotNull PsiCallExpression expression) {
-    List<String> conversions = new LinkedList<String>();
     PsiExpressionList argumentList = expression.getArgumentList();
     PsiExpression[] arguments = argumentList != null ? argumentList.getExpressions() : new PsiExpression[]{};
+    List<String> conversions = new LinkedList<String>();
     //noinspection UnusedDeclaration
     for (final PsiExpression a : arguments) {
       conversions.add("");
@@ -622,18 +629,40 @@ public class Converter {
   }
 
   @NotNull
+  public static List<String> createConversions(@NotNull PsiPolyadicExpression expression, PsiType expectedType) {
+    PsiExpression[] arguments = expression.getOperands();
+    int length = arguments.length;
+    List<String> conversions = new LinkedList<String>();
+
+    List<PsiType> expectedTypes = Collections.nCopies(length, expectedType);
+    List<PsiType> actualTypes = new LinkedList<PsiType>();
+
+    for (PsiExpression e : arguments)
+      actualTypes.add(e.getType());
+
+    assert actualTypes.size() == expectedTypes.size() : "The type list must have the same length";
+
+    for (int i = 0; i < actualTypes.size(); i++)
+      conversions.add(i, createConversionForExpression(arguments[i], expectedTypes.get(i)));
+
+    return conversions;
+  }
+
+  @NotNull
   private static String createConversionForExpression(@Nullable PsiExpression expression, @NotNull PsiType expectedType) {
     String conversion = "";
     if (expression != null) {
       PsiType actualType = expression.getType();
-      if (actualType != null) {
-        if (Node.PRIMITIVE_TYPES.contains(actualType.getCanonicalText()) && (expression instanceof PsiReferenceExpression
-          && ((PsiReferenceExpression) expression).isQualified() || expression instanceof PsiMethodCallExpression)
-          && expressionToExpression(expression).toKotlin().contains("?."))
-          conversion += ".sure()";
+      boolean isPrimitiveTypeOrNull = actualType == null || Node.PRIMITIVE_TYPES.contains(actualType.getCanonicalText());
+      boolean isRef = (expression instanceof PsiReferenceExpression && ((PsiReferenceExpression) expression).isQualified() || expression instanceof PsiMethodCallExpression);
+      boolean containsQuestDot = expressionToExpression(expression).toKotlin().contains("?.");
+
+      if (isPrimitiveTypeOrNull && isRef && containsQuestDot)
+        conversion += ".sure()";
+
+      if (actualType != null)
         if (isConversionNeeded(actualType, expectedType))
           conversion += getPrimitiveTypeConversion(expectedType.getCanonicalText());
-      }
     }
     return conversion;
   }

@@ -10,16 +10,16 @@ open public fun getName() : T? {
 return myName
 }
 class object {
-open public fun init<T>(name : T?) : Identifier {
+open public fun init<T>(name : T?) : Identifier<T> {
 val __ = Identifier(name, false)
 return __
 }
-open public fun init<T>(name : T?, isNullable : Boolean) : Identifier {
+open public fun init<T>(name : T?, isNullable : Boolean) : Identifier<T> {
 val __ = Identifier(name, false)
 __.myNullable = isNullable
 return __
 }
-open public fun init<T>(name : T?, hasDollar : Boolean, isNullable : Boolean) : Identifier {
+open public fun init<T>(name : T?, hasDollar : Boolean, isNullable : Boolean) : Identifier<T> {
 val __ = Identifier(name, hasDollar)
 __.myNullable = isNullable
 return __
