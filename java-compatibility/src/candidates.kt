@@ -1,11 +1,11 @@
 package std.compatibility
 
 // TypeInfo
-fun <T> typeinfo.TypeInfo<T>.getJavaClass() : java.lang.Class<T> {
+fun <T> TypeInfo<T>.getJavaClass() : java.lang.Class<T> {
     return (this as java.lang.Object).getClass() as Class<T>
 }
 fun getJavaClass<T>() : java.lang.Class<T> {
-    return typeinfo.typeinfo<T>.getJavaClass()
+    return typeinfo<T>.getJavaClass()
 }
 
 fun assert(condition : Boolean, message : () -> String) = if (condition) System.err?.println("Assert: " + message())
