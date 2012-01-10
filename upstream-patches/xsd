@@ -1,5 +1,5 @@
 diff --git a/.idea/modules.xml b/.idea/modules.xml
-index 299b010..0343626 100644
+index 9c559c5..15f11ba 100644
 --- a/.idea/modules.xml
 +++ b/.idea/modules.xml
 @@ -9,6 +9,7 @@
@@ -9,12 +9,12 @@ index 299b010..0343626 100644
 +      <module fileurl="file://$PROJECT_DIR$/compiler/frontend.xsd/frontend.xsd.iml" filepath="$PROJECT_DIR$/compiler/frontend.xsd/frontend.xsd.iml" />
        <module fileurl="file://$PROJECT_DIR$/grammar/grammar.iml" filepath="$PROJECT_DIR$/grammar/grammar.iml" />
        <module fileurl="file://$PROJECT_DIR$/idea/idea.iml" filepath="$PROJECT_DIR$/idea/idea.iml" />
-       <module fileurl="file://$PROJECT_DIR$/shift/shift.iml" filepath="$PROJECT_DIR$/shift/shift.iml" />
+       <module fileurl="file://$PROJECT_DIR$/stdlib/stdlib.iml" filepath="$PROJECT_DIR$/stdlib/stdlib.iml" />
 diff --git a/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java b/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java
-index 8dafa6b..cdd4913 100644
+index 55f60c9..facd398 100644
 --- a/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java
 +++ b/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java
-@@ -805,7 +805,8 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> {
+@@ -806,7 +806,8 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> {
      }
  
      private void markLineNumber(JetElement statement) {
@@ -25,7 +25,7 @@ index 8dafa6b..cdd4913 100644
              int lineNumber = document.getLineNumber(statement.getTextRange().getStartOffset());  // 0-based
              if (lineNumber == myLastLineNumber) {
 diff --git a/compiler/backend/src/org/jetbrains/jet/codegen/GenerationState.java b/compiler/backend/src/org/jetbrains/jet/codegen/GenerationState.java
-index 461c528..3077e70 100644
+index 99539cb..1c9d67b 100644
 --- a/compiler/backend/src/org/jetbrains/jet/codegen/GenerationState.java
 +++ b/compiler/backend/src/org/jetbrains/jet/codegen/GenerationState.java
 @@ -6,6 +6,7 @@ package org.jetbrains.jet.codegen;
@@ -33,15 +33,14 @@ index 461c528..3077e70 100644
  import com.intellij.openapi.project.Project;
  import com.intellij.openapi.util.Pair;
 +import com.intellij.openapi.vfs.VirtualFile;
+ import com.intellij.psi.PsiElement;
  import com.intellij.util.containers.Stack;
- import org.jetbrains.jet.codegen.intrinsics.IntrinsicMethods;
- import org.jetbrains.jet.lang.cfg.pseudocode.JetControlFlowDataTraceFactory;
-@@ -115,7 +116,9 @@ public class GenerationState {
+ import org.jetbrains.annotations.NotNull;
+@@ -118,7 +119,8 @@ public class GenerationState {
                      generateNamespace(namespace);
                  }
                  catch (Throwable e) {
 -                    errorHandler.reportException(e, namespace.getContainingFile().getVirtualFile().getUrl());
-+//                    errorHandler.reportException(e, namespace.getContainingFile().getVirtualFile().getUrl());
 +                    VirtualFile virtualFile = namespace.getContainingFile().getVirtualFile();
 +                    errorHandler.reportException(e, virtualFile == null ? "synthetic" : virtualFile.getUrl());
                      DiagnosticUtils.throwIfRunningOnServer(e);
@@ -60,22 +59,22 @@ index 5102197..f5aa63f 100644
  </module>
  
 diff --git a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java
-index f878d44..84aa501 100644
+index d99e9a0..0b36fa6 100644
 --- a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java
 +++ b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java
-@@ -83,9 +83,13 @@ public class AnalyzerFacade {
-     public static BindingContext analyzeNamespacesWithJavaIntegration(Project project, Collection<? extends JetDeclaration> declarations, Predicate<PsiFile> filesToAnalyzeCompletely, JetControlFlowDataTraceFactory flowDataTraceFactory) {
+@@ -78,9 +78,13 @@ public class AnalyzerFacade {
+     public static BindingContext analyzeFilesWithJavaIntegration(Project project, Collection<JetFile> files, Predicate<PsiFile> filesToAnalyzeCompletely, JetControlFlowDataTraceFactory flowDataTraceFactory) {
          BindingTraceContext bindingTraceContext = new BindingTraceContext();
          JetSemanticServices semanticServices = JetSemanticServices.createSemanticServices(project);
 +        JavaSemanticServices javaSemanticServices = new JavaSemanticServices(project, JetSemanticServices.createSemanticServices(project), bindingTraceContext);
-         return AnalyzingUtils.analyzeNamespacesWithGivenTrace(
+         return AnalyzingUtils.analyzeFilesWithGivenTrace(
                  project,
 -                JavaBridgeConfiguration.createJavaBridgeConfiguration(project, bindingTraceContext, StandardConfiguration.createStandardConfiguration(project)),
 +                XsdBridgeConfiguration.createXsdBridgeConfiguration(
 +                        project,
 +                        JavaBridgeConfiguration.createJavaBridgeConfiguration(StandardConfiguration.createStandardConfiguration(project), javaSemanticServices),
 +                        javaSemanticServices),
-                 declarations,
+                 files,
                  filesToAnalyzeCompletely,
                  flowDataTraceFactory,
 diff --git a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/JavaBridgeConfiguration.java b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/JavaBridgeConfiguration.java
@@ -114,10 +113,10 @@ index d2dc2bd..5835234 100644
  
 diff --git a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/XsdBridgeConfiguration.java b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/XsdBridgeConfiguration.java
 new file mode 100644
-index 0000000..f35e5c4
+index 0000000..9642b28
 --- /dev/null
 +++ b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/XsdBridgeConfiguration.java
-@@ -0,0 +1,50 @@
+@@ -0,0 +1,52 @@
 +package org.jetbrains.jet.lang.resolve.java;
 +
 +import com.intellij.openapi.project.Project;
@@ -154,6 +153,8 @@ index 0000000..f35e5c4
 +    public void addDefaultImports(@NotNull BindingTrace trace, @NotNull WritableScope rootScope) {
 +//                rootScope.importScope(new XsdScope(project, trace, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/maven.xsd", "jet.xsd.maven").getScope());
 +//                rootScope.importScope(new XsdScope(project, trace, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/facebook.xsd", "jet.xsd.facebook").getScope());
++        JetScope standardXsdScope = XsdScope.createStandardXsdScope(project, trace, javaSemanticServices);
++        rootScope.importScope(standardXsdScope);
 +        JetScope shiporder = XsdScope.createXsdScope(project, trace, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/shiporder.xsd", "jet.xsd.shiporder", javaSemanticServices);
 +        rootScope.importScope(shiporder);
 +        JetScope example = XsdScope.createXsdScope(project, trace, "/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/example.xsd", "jet.xsd.example", javaSemanticServices);
@@ -2625,6 +2626,16 @@ index 0000000..dea714b
 +<xsd:element name="error_response" type="FacebookApiException" />
 +
 +</xsd:schema>
+diff --git a/compiler/frontend.xsd/src/jet/xsd/jet.xsd.kt b/compiler/frontend.xsd/src/jet/xsd/jet.xsd.kt
+new file mode 100644
+index 0000000..d13a988
+--- /dev/null
++++ b/compiler/frontend.xsd/src/jet/xsd/jet.xsd.kt
+@@ -0,0 +1,3 @@
++package jet.xsd
++
++class XmlElement<T>(var value : T)
+\ No newline at end of file
 diff --git a/compiler/frontend.xsd/src/jet/xsd/maven.xsd b/compiler/frontend.xsd/src/jet/xsd/maven.xsd
 new file mode 100644
 index 0000000..4212d37
@@ -5098,10 +5109,10 @@ index 0000000..0cbf923
 \ No newline at end of file
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdScope.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdScope.java
 new file mode 100644
-index 0000000..1d3486c
+index 0000000..a3119e1
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdScope.java
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,91 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k;
 +
 +import com.google.common.base.Predicates;
@@ -5110,7 +5121,6 @@ index 0000000..1d3486c
 +import com.intellij.psi.PsiFile;
 +import com.intellij.psi.PsiFileFactory;
 +import org.jetbrains.annotations.NotNull;
-+import org.jetbrains.jet.lang.JetSemanticServices;
 +import org.jetbrains.jet.lang.StandardConfiguration;
 +import org.jetbrains.jet.lang.cfg.pseudocode.JetControlFlowDataTraceFactory;
 +import org.jetbrains.jet.lang.descriptors.NamespaceDescriptor;
@@ -5139,6 +5149,46 @@ index 0000000..1d3486c
 +    private static HashMap<String, String> importedNamespacesText = new HashMap<String, String>();
 +
 +    public static JetScope createXsdScope(@NotNull Project project, BindingTrace trace, String xsdFileName, String namespaceName, JavaSemanticServices javaSemanticServices) {
++        return createScope(project, trace, javaSemanticServices, namespaceName, getPackageText(xsdFileName, namespaceName));
++    }
++
++    public static JetScope createStandardXsdScope(Project project, BindingTrace trace, JavaSemanticServices javaSemanticServices) {
++        String text = "";
++        try {
++            text = FileUtil.loadFile(new File("/home/ignatov/src/jet/compiler/frontend.xsd/src/jet/xsd/jet.xsd.kt"));
++        } catch (IOException e) {
++            //noinspection CallToPrintStackTrace
++            e.printStackTrace();
++        }
++        return createScope(project, trace, javaSemanticServices, "jet.xsd", text);
++    }
++
++    private static JetScope createScope(Project project, BindingTrace trace, JavaSemanticServices javaSemanticServices, String packageName, String packageText) {
++        JetFile file = (JetFile) PsiFileFactory.getInstance(project).createFileFromText("empty.jet", JetFileType.INSTANCE, packageText);
++        try {
++            FileUtil.writeToFile(new File("/home/ignatov/downloads/" + packageName + ".kt"), file.getText());
++        } catch (IOException e) {
++            //noinspection CallToPrintStackTrace
++            e.printStackTrace();
++        }
++        AnalyzingUtils.checkForSyntacticErrors(file);
++
++        BindingContext bindingContext = AnalyzingUtils.analyzeFiles(
++                project,
++                JavaBridgeConfiguration.createJavaBridgeConfiguration(StandardConfiguration.createStandardConfiguration(project), javaSemanticServices),
++                Collections.singleton(file),
++                Predicates.<PsiFile>alwaysFalse(),
++                JetControlFlowDataTraceFactory.EMPTY);
++
++        NamespaceDescriptor namespaceDescriptor = (NamespaceDescriptorImpl) bindingContext.get(BindingContext.DECLARATION_TO_DESCRIPTOR, file);
++
++        AnalyzingUtils.throwExceptionOnErrors(trace.getBindingContext());
++
++        //noinspection ConstantConditions
++        return namespaceDescriptor.getMemberScope();
++    }
++
++    private static String getPackageText(String xsdFileName, String namespaceName) {
 +        String text;
 +        if (!importedNamespacesText.containsKey(namespaceName)) {
 +            text = XsdParser.parse(new File(xsdFileName), namespaceName);
@@ -5147,27 +5197,7 @@ index 0000000..1d3486c
 +        else {
 +            text = importedNamespacesText.get(namespaceName);
 +        }
-+        JetFile file = (JetFile) PsiFileFactory.getInstance(project).createFileFromText("empty.jet", JetFileType.INSTANCE, text);
-+
-+        try {
-+            FileUtil.writeToFile(new File("/home/ignatov/downloads/" + namespaceName + ".kt"), file.getText());
-+        } catch (IOException e) {
-+            e.printStackTrace();
-+        }
-+        AnalyzingUtils.checkForSyntacticErrors(file);
-+
-+        BindingContext bindingContext = AnalyzingUtils.analyzeNamespaces(
-+                project,
-+                JavaBridgeConfiguration.createJavaBridgeConfiguration(StandardConfiguration.createStandardConfiguration(project), javaSemanticServices),
-+                Collections.singleton(file.getRootNamespace()),
-+                Predicates.<PsiFile>alwaysFalse(),
-+                JetControlFlowDataTraceFactory.EMPTY);
-+
-+        NamespaceDescriptor namespaceDescriptor = (NamespaceDescriptorImpl) bindingContext.get(BindingContext.DECLARATION_TO_DESCRIPTOR, file.getRootNamespace());
-+
-+        AnalyzingUtils.throwExceptionOnErrors(trace.getBindingContext());
-+
-+        return namespaceDescriptor.getMemberScope();
++        return text;
 +    }
 +
 +    public static boolean isImported(String namespaceName) {
@@ -5176,10 +5206,10 @@ index 0000000..1d3486c
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java
 new file mode 100644
-index 0000000..518f178
+index 0000000..3472c40
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java
-@@ -0,0 +1,179 @@
+@@ -0,0 +1,181 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k;
 +
 +import com.google.common.base.Joiner;
@@ -5195,6 +5225,8 @@ index 0000000..518f178
 +    private final static String HTTP_WWW_W3_ORG_2001_XMLSCHEMA = "http://www.w3.org/2001/XMLSchema";
 +    private final static String OFFSET = "    ";
 +    private final static String N = System.getProperty("line.separator");
++    public static final Joiner JOINER = Joiner.on("," + N);
++    private final static String N2 = N + N;
 +    private final static Map<String, String> typeMap = initializeTypeMap();
 +    private final StringBuilder classesBuilder;
 +
@@ -5209,12 +5241,12 @@ index 0000000..518f178
 +
 +    private void addNamespaceAndDefaultImports(String namespace) {
 +        classesBuilder.append(
-+                "namespace" + " " + namespace + N +
++                "package" + " " + namespace + N +
 +                "import java.util.List" + N +
 +                "import java.math.BigDecimal" + N +
 +                "import java.math.BigInteger" + N +
 +                "import javax.xml.datatype.XMLGregorianCalendar" + N +
-+                "import com.sun.org.apache.xerces.internal.jaxp.datatype.XMLGregorianCalendarImpl" + N
++                "import com.sun.org.apache.xerces.internal.jaxp.datatype.XMLGregorianCalendarImpl" + N2
 +        );
 +    }
 +
@@ -5290,12 +5322,12 @@ index 0000000..518f178
 +    }
 +
 +    private static String createClassDeclaration(final String name, final List<String> vars) {
-+        return "class" + " " + upperFirst(name) + "(" + N + Joiner.on("," + N).join(vars) + N + ")" + " " + "{" + N +
++        return "class" + " " + upperFirst(name) + "(" + N + JOINER.join(vars) + N + ")" + " " + "{" + N +
 +               "    fun toXML() = \"<XML>\"" + N +
 +               "}" + N;
 +    }
 +
-+    private List<String> getVars(final XSModelGroup modelGroup) {
++    private static List<String> getVars(final XSModelGroup modelGroup) {
 +        final List<String> arguments = new LinkedList<String>();
 +        for (XSParticle c : modelGroup.getChildren()) {
 +            if (c.getTerm().isElementDecl()) {
@@ -5327,7 +5359,7 @@ index 0000000..518f178
 +        return type;
 +    }
 +
-+    private String getType(XSType type, String elementName, boolean isMultiply, boolean isNullable) {
++    private static String getType(XSType type, String elementName, boolean isMultiply, boolean isNullable) {
 +        if (type.isSimpleType()) {
 +            final String typeName = type.asSimpleType().getName();
 +            if (isStandardType(type)) {
@@ -5361,7 +5393,7 @@ index 0000000..518f178
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java
 new file mode 100644
-index 0000000..c265ff1
+index 0000000..87778d7
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java
 @@ -0,0 +1,98 @@
@@ -5431,10 +5463,10 @@ index 0000000..c265ff1
 +        element.acceptChildren(this);
 +    }
 +
++
 +    @Override
-+    public void visitNamespace(JetNamespace namespace) {
-+//        ImportClassHelper.perform("org.jdom.Element", namespace);
-+        namespace.acceptChildren(this);
++    public void visitJetFile(JetFile file) {
++        file.acceptChildren(this);
 +    }
 +
 +    public static boolean fromXSD(@Nullable JetType type) {
@@ -5606,16 +5638,13 @@ index 0000000..fbdb859
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java
 new file mode 100644
-index 0000000..7732a98
+index 0000000..372a065
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java
-@@ -0,0 +1,44 @@
+@@ -0,0 +1,56 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k.changers;
 +
-+import org.jetbrains.jet.lang.psi.JetDotQualifiedExpression;
-+import org.jetbrains.jet.lang.psi.JetExpression;
-+import org.jetbrains.jet.lang.psi.JetPsiFactory;
-+import org.jetbrains.jet.lang.psi.JetSafeQualifiedExpression;
++import org.jetbrains.jet.lang.psi.*;
 +import org.jetbrains.jet.lang.resolve.BindingContext;
 +import org.jetbrains.jet.lang.types.JetType;
 +
@@ -5630,40 +5659,58 @@ index 0000000..7732a98
 +    }
 +
 +    @Override
++    public void visitExpression(JetExpression expression) {
++        super.visitExpression(expression);
++    }
++
++    @Override
 +    public void visitSafeQualifiedExpression(JetSafeQualifiedExpression expression) {
 +        super.visitSafeQualifiedExpression(expression);
 +    }
 +
 +    @Override
 +    public void visitDotQualifiedExpression(JetDotQualifiedExpression expression) {
++        String action = createAction(expression);
++        if (!action.isEmpty()) {
++            expression.replace(JetPsiFactory.createExpression(expression.getProject(), action));
++        }
++        super.visitDotQualifiedExpression(expression);
++    }
++
++    public String createAction(JetQualifiedExpression expression) {
 +        JetExpression receiver = expression.getReceiverExpression();
 +        JetExpression selector = expression.getSelectorExpression();
 +        JetType receiverType = bindingContext.get(BindingContext.EXPRESSION_TYPE, receiver);
 +        JetType selectorType = bindingContext.get(BindingContext.EXPRESSION_TYPE, selector);
++        String action = "";
 +        if (fromXSD(receiverType)) {
-+            if (selector != null && !selector.getText().equals("toXML()")) {
-+                String action = format("{0}?.getAttributeValue(\"{1}\")", receiver.getText(), selector.getText());
++            if (selector != null && selectorType != null && !selector.getText().equals("toXML()")) {
++                String sureIfNeeded = selectorType.isNullable() ? "" : ".sure()";
++                action = format("as{0}({1}?.getChildText(\"{2}\")){3}", selectorType, receiver.getText(), selector.getText(), sureIfNeeded);
 +                if (isList(selectorType)) {
 +                    action = format("({0}?.getChildren(\"{1}\") as List<org.jdom.Element?>)", receiver.getText(), selector.getText().replace("List", ""));
-+                } else if (isChild(selectorType)) {
++                }
++                else if (isChild(selectorType)) {
 +                    action = format("({0}?.getChild(\"{1}\") as org.jdom.Element?)", receiver.getText(), selector.getText());
 +                }
-+                expression.replace(JetPsiFactory.createExpression(expression.getProject(), action));
 +            }
 +        }
-+        super.visitDotQualifiedExpression(expression);
++        return action;
 +    }
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java
 new file mode 100644
-index 0000000..174d043
+index 0000000..cb99076
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,91 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k.changers;
 +
 +import com.intellij.openapi.util.Pair;
-+import org.jetbrains.jet.lang.psi.*;
++import com.intellij.psi.PsiElement;
++import org.jetbrains.jet.lang.psi.JetBinaryExpression;
++import org.jetbrains.jet.lang.psi.JetExpression;
++import org.jetbrains.jet.lang.psi.JetQualifiedExpression;
 +import org.jetbrains.jet.lang.resolve.BindingContext;
 +import org.jetbrains.jet.lang.types.JetType;
 +
@@ -5684,8 +5731,9 @@ index 0000000..174d043
 +    List<Pair<JetExpression, JetExpression>> replaces = new LinkedList<Pair<JetExpression, JetExpression>>();
 +
 +    public void apply() {
-+        for (Pair<JetExpression, JetExpression> p : replaces)
++        for (Pair<JetExpression, JetExpression> p : replaces) {
 +            p.getFirst().replace(p.getSecond());
++        }
 +    }
 +
 +    @Override
@@ -5700,7 +5748,39 @@ index 0000000..174d043
 +                JetType selectorType = bindingContext.get(BindingContext.EXPRESSION_TYPE, selector);
 +                if (fromXSD(receiverType)) {
 +                    if (selector != null && right != null) {
-+                        String action = format("setAttribute(\"{0}\", {1})", selector.getText(), right.getText());
++                        right.accept(new XsdGetterChanger(bindingContext));
++                        String action = format("setContent(\"{0}\", {1})", selector.getText(), right.getText());
++                        if (isChild(selectorType)) {
++                            action = format("setContent({0})", right.getText());
++                        }
++                        replaces.add(new Pair<JetExpression, JetExpression>(
++                                expression,
++                                createExpression(expression.getProject(), receiver.getText() + QUEST_DOT + action)
++                        ));
++                    }
++                }
++            }
++        }
++        else if (expression.getOperationToken().toString().equals("PLUSEQ")) {
++            JetExpression left = expression.getLeft();
++            JetExpression right = expression.getRight();
++            if (left instanceof JetQualifiedExpression) {
++                JetExpression receiver = ((JetQualifiedExpression) left).getReceiverExpression();
++                JetExpression selector = ((JetQualifiedExpression) left).getSelectorExpression();
++                JetType receiverType = bindingContext.get(BindingContext.EXPRESSION_TYPE, receiver);
++                JetType selectorType = bindingContext.get(BindingContext.EXPRESSION_TYPE, selector);
++                if (fromXSD(receiverType)) {
++                    if (selector != null && right != null) {
++                        String newRight = "";
++                        if (right instanceof JetQualifiedExpression) {
++                            newRight = new XsdGetterChanger(bindingContext).createAction((JetQualifiedExpression) right);
++                        }
++                        else {
++                            right.accept(new XsdGetterChanger((bindingContext)));
++                            newRight = right.getText();
++                        }
++                        String newLeft = new XsdGetterChanger(bindingContext).createAction((JetQualifiedExpression) left);
++                        String action = format("setContent(\"{0}\", {1} + {2})", selector.getText(), newLeft, newRight);
 +                        if (isChild(selectorType)) {
 +                            action = format("setContent({0})", right.getText());
 +                        }
@@ -5716,10 +5796,10 @@ index 0000000..174d043
 +    }
 +}
 diff --git a/compiler/frontend/src/org/jetbrains/jet/lang/psi/JetPsiFactory.java b/compiler/frontend/src/org/jetbrains/jet/lang/psi/JetPsiFactory.java
-index e01dfda..bba196d 100644
+index d542ea6..ca44e7d 100644
 --- a/compiler/frontend/src/org/jetbrains/jet/lang/psi/JetPsiFactory.java
 +++ b/compiler/frontend/src/org/jetbrains/jet/lang/psi/JetPsiFactory.java
-@@ -106,4 +106,9 @@ public class JetPsiFactory {
+@@ -105,4 +105,9 @@ public class JetPsiFactory {
          JetClass aClass = createClass(project, "class A()");
          return aClass.findElementAt(7).getParent();
      }
@@ -5742,7 +5822,7 @@ index 061858a..9feed91 100644
  </module>
  
 diff --git a/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java b/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
-index 766868d..95a44a1 100644
+index 5b27515..12fedc5 100644
 --- a/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
 +++ b/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
 @@ -12,6 +12,7 @@ import com.intellij.openapi.module.Module;
@@ -5753,11 +5833,14 @@ index 766868d..95a44a1 100644
  import com.intellij.psi.PsiFile;
  import com.intellij.psi.PsiManager;
  import com.intellij.util.Chunk;
-@@ -23,10 +24,14 @@ import org.jetbrains.jet.lang.psi.JetFile;
- import org.jetbrains.jet.lang.psi.JetNamespace;
+@@ -22,10 +23,17 @@ import org.jetbrains.jet.lang.diagnostics.Diagnostic;
+ import org.jetbrains.jet.lang.psi.JetFile;
  import org.jetbrains.jet.lang.resolve.BindingContext;
  import org.jetbrains.jet.lang.resolve.java.AnalyzerFacade;
-+import org.jetbrains.jet.lang.resolve.xsd2k.changers.*;
++import org.jetbrains.jet.lang.resolve.xsd2k.changers.XsdCommonChanger;
++import org.jetbrains.jet.lang.resolve.xsd2k.changers.XsdConstructorChanger;
++import org.jetbrains.jet.lang.resolve.xsd2k.changers.XsdGetterChanger;
++import org.jetbrains.jet.lang.resolve.xsd2k.changers.XsdSetterChanger;
  import org.jetbrains.jet.plugin.JetFileType;
  
 +import javax.swing.*;
@@ -5768,16 +5851,15 @@ index 766868d..95a44a1 100644
  import java.util.List;
  
  import static com.intellij.openapi.compiler.CompilerMessageCategory.ERROR;
-@@ -62,51 +67,151 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -61,51 +69,149 @@ public class JetCompiler implements TranslatingCompiler {
              return;
          }
  
 +        final VirtualFile[] allFiles = compileContext.getCompileScope().getFiles(null, true);
 +        final GenerationState[] generationState = new GenerationState[1];
 +        @SuppressWarnings("unchecked")
-+        final List<JetNamespace>[] namespaces = (List<JetNamespace>[]) Array.newInstance(List.class, 1);
++        final List<JetFile>[] files = (List<JetFile>[]) Array.newInstance(List.class, 1);
 +        final BindingContext[] bindingContexts = new BindingContext[1];
-+
 +        final boolean[] errors = {false};
 +
          ApplicationManager.getApplication().runReadAction(new Runnable() {
@@ -5786,28 +5868,22 @@ index 766868d..95a44a1 100644
 -                VirtualFile[] allFiles = compileContext.getCompileScope().getFiles(null, true);
 -
 -                GenerationState generationState = new GenerationState(compileContext.getProject(), ClassBuilderFactory.BINARIES);
--                List<JetNamespace> namespaces = Lists.newArrayList();
+-                List<JetFile> files = Lists.newArrayList();
 -                for (VirtualFile virtualFile : allFiles) {
 -                    PsiFile psiFile = PsiManager.getInstance(compileContext.getProject()).findFile(virtualFile);
 -                    if (psiFile instanceof JetFile) {
--                        namespaces.add(((JetFile) psiFile).getRootNamespace());
+-                        files.add(((JetFile) psiFile));
 -                    }
 -                }
--
--                BindingContext bindingContext =
--                    AnalyzerFacade.analyzeNamespacesWithJavaIntegration(compileContext.getProject(), namespaces, Predicates.<PsiFile>alwaysTrue(), JetControlFlowDataTraceFactory.EMPTY);
 +                generationState[0] = new GenerationState(compileContext.getProject(), ClassBuilderFactory.BINARIES);
-+                namespaces[0] = getNamespaces(allFiles, compileContext);
-+                bindingContexts[0] = createBindingContext(namespaces[0], compileContext);
-+            }
-+        });
++                files[0] = getJetFilesFromVirtualFiles(allFiles, compileContext);
++                bindingContexts[0] = createBindingContext(files[0], compileContext);
  
+-                BindingContext bindingContext =
+-                    AnalyzerFacade.analyzeFilesWithJavaIntegration(compileContext.getProject(), files, Predicates.<PsiFile>alwaysTrue(), JetControlFlowDataTraceFactory.EMPTY);
+-
 -                boolean errors = false;
 -                for (Diagnostic diagnostic : bindingContext.getDiagnostics()) {
-+        ApplicationManager.getApplication().runReadAction(new Runnable() {
-+            @Override
-+            public void run() {
-+                bindingContexts[0] = createBindingContext(namespaces[0], compileContext);
 +                for (Diagnostic diagnostic : bindingContexts[0].getDiagnostics()) {
                      switch (diagnostic.getSeverity()) {
                          case ERROR:
@@ -5827,10 +5903,10 @@ index 766868d..95a44a1 100644
                  }
 -                
 -                if (!errors) {
--                    generationState.compileCorrectNamespaces(bindingContext, namespaces, new CompilationErrorHandler() {
+-                    generationState.compileCorrectFiles(bindingContext, files, new CompilationErrorHandler() {
 -                        @Override
 -                        public void reportException(Throwable exception, String fileUrl) {
--                            if(exception instanceof CompilationException) {
+-                            if (exception instanceof CompilationException) {
 -                                report((CompilationException) exception, compileContext);
 +            }
 +        });
@@ -5839,8 +5915,8 @@ index 766868d..95a44a1 100644
 +            ApplicationManager.getApplication().runReadAction(new Runnable() {
 +                @Override
 +                public void run() {
-+                    namespaces[0] = createNamespacesCopy(allFiles, compileContext);
-+                    bindingContexts[0] = createBindingContext(namespaces[0], compileContext);
++                    files[0] = createFilesCopy(allFiles, compileContext);
++                    bindingContexts[0] = createBindingContext(files[0], compileContext);
 +                }
 +            });
 +
@@ -5851,9 +5927,9 @@ index 766868d..95a44a1 100644
 +                        ApplicationManager.getApplication().runWriteAction(new Runnable() {
 +                            @Override
 +                            public void run() {
-+                                for (final JetNamespace n : namespaces[0]) {
++                                for (final JetFile f : files[0]) {
 +                                    XsdSetterChanger visitor = new XsdSetterChanger(bindingContexts[0]);
-+                                    n.accept(visitor);
++                                    f.accept(visitor);
 +                                    visitor.apply();
 +                                }
 +                            }
@@ -5866,21 +5942,8 @@ index 766868d..95a44a1 100644
 +                        ApplicationManager.getApplication().runWriteAction(new Runnable() {
 +                            @Override
 +                            public void run() {
-+                                for (final JetNamespace n : namespaces[0]) {
-+                                    n.accept(new XsdGetterChanger(bindingContexts[0]));
-+                                }
-+                            }
-+                        });
-+                    }
-+                });
-+                SwingUtilities.invokeAndWait(new Runnable() {
-+                    @Override
-+                    public void run() {
-+                        ApplicationManager.getApplication().runWriteAction(new Runnable() {
-+                            @Override
-+                            public void run() {
-+                                for (final JetNamespace n : namespaces[0]) {
-+                                    n.accept(new XsdGenericChanger(bindingContexts[0]));
++                                for (final JetFile f : files[0]) {
++                                    f.accept(new XsdGetterChanger(bindingContexts[0]));
 +                                }
                              }
 -                            else {
@@ -5894,28 +5957,33 @@ index 766868d..95a44a1 100644
 +                        ApplicationManager.getApplication().runWriteAction(new Runnable() {
 +                            @Override
 +                            public void run() {
-+                                for (final JetNamespace n : namespaces[0]) {
-+                                    n.accept(new XsdConstructorChanger(bindingContexts[0]));
-+                                    n.accept(new XsdCommonChanger(bindingContexts[0]));
-+                                    if (n.getName() != null && n.getName().equals("xsd_test2")) {
-+                                        System.out.println(n.getText());
-+//                                        System.out.println(DebugUtil.psiToString(n, false));
++                                for (final JetFile f : files[0]) {
++                                    f.accept(new XsdConstructorChanger(bindingContexts[0]));
++                                    f.accept(new XsdCommonChanger(bindingContexts[0]));
++                                    String packageName = f.getNamespaceHeader().getName();
++                                    if (packageName != null && packageName.equals("xsd_test2")) {
++                                        //noinspection UseOfSystemOutOrSystemErr
++                                        System.out.println(f.getText());
++                                        // System.out.println(DebugUtil.psiToString(f, false));
 +                                    }
 +                                }
                              }
 +                        });
 +                    }
 +                });
++
 +            } catch (InterruptedException e) {
++                //noinspection CallToPrintStackTrace
 +                e.printStackTrace();
 +            } catch (InvocationTargetException e) {
++                //noinspection CallToPrintStackTrace
 +                e.printStackTrace();
 +            }
 +
 +            ApplicationManager.getApplication().runReadAction(new Runnable() {
 +                @Override
 +                public void run() {
-+                    bindingContexts[0] = createBindingContext(namespaces[0], compileContext);
++                    bindingContexts[0] = createBindingContext(files[0], compileContext);
 +                    for (Diagnostic diagnostic : bindingContexts[0].getDiagnostics()) {
 +                        switch (diagnostic.getSeverity()) {
 +                            case ERROR:
@@ -5933,7 +6001,7 @@ index 766868d..95a44a1 100644
 +                    }
 +
 +                    if (!errors[0]) {
-+                        generationState[0].compileCorrectNamespaces(bindingContexts[0], namespaces[0], new CompilationErrorHandler() {
++                        generationState[0].compileCorrectFiles(bindingContexts[0], files[0], new CompilationErrorHandler() {
 +                            @Override
 +                            public void reportException(Throwable exception, String fileUrl) {
 +                                compileContext.addMessage(CompilerMessageCategory.WARNING, exception.getClass().getCanonicalName() + ": " + exception.getMessage(), fileUrl, 0, 0);
@@ -5945,21 +6013,44 @@ index 766868d..95a44a1 100644
 +                                }
 +                            }
 +                        });
++
++//                if (!errors) {
++//                    generationState.compileCorrectFiles(bindingContext, files, new CompilationErrorHandler() {
++//                        @Override
++//                        public void reportException(Throwable exception, String fileUrl) {
++//                            if (exception instanceof CompilationException) {
++//                                report((CompilationException) exception, compileContext);
++//                            }
++//                            else {
++//                                compileContext.addMessage(CompilerMessageCategory.ERROR, exception.getClass().getCanonicalName() + ": " + exception.getMessage(), fileUrl, 0, 0);
++//                            }
++//                        }
++//                    });
  ///////////
  //                    GenerationState generationState2 = new GenerationState(compileContext.getProject(), ClassBuilderFactory.TEXT);
- //                    generationState2.compileCorrectNamespaces(bindingContext, namespaces);
-@@ -122,20 +227,21 @@ public class JetCompiler implements TranslatingCompiler {
+ //                    generationState2.compileCorrectFiles(bindingContext, namespaces);
+@@ -121,20 +227,30 @@ public class JetCompiler implements TranslatingCompiler {
  ///////////
  
  
 -                    final ClassFileFactory factory = generationState.getFactory();
--                    List<String> files = factory.files();
--                    for (String file : files) {
+-                    List<String> filesNames = factory.files();
+-                    for (String file : filesNames) {
 -                        File target = new File(outputDir.getPath(), file);
 -                        try {
 -                            FileUtil.writeToFile(target, factory.asBytes(file));
 -                        } catch (IOException e) {
 -                            compileContext.addMessage(ERROR, e.getMessage(), null, 0, 0);
++//                    final ClassFileFactory factory = generationState[0].getFactory();
++//                    List<String> filesNames = factory.files();
++//                    for (String file : filesNames) {
++//                        File target = new File(outputDir.getPath(), file);
++//                        try {
++//                            FileUtil.writeToFile(target, factory.asBytes(file));
++//                        } catch (IOException e) {
++//                            compileContext.addMessage(ERROR, e.getMessage(), null, 0, 0);
++//                        }
++//                    }
 +                        final ClassFileFactory factory = generationState[0].getFactory();
 +                        List<String> files = factory.files();
 +                        for (String file : files) {
@@ -5976,44 +6067,18 @@ index 766868d..95a44a1 100644
 -        });
 -        
 +            });
-+        }
 +
  //        Map<Module, ModuleCompileState> moduleMap = new HashMap<Module, ModuleCompileState>();
  //
  //        for (VirtualFile virtualFile : virtualFiles) {
-@@ -154,10 +260,38 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -151,12 +267,13 @@ public class JetCompiler implements TranslatingCompiler {
+ //            state.done();
+ //        }
  
++        }
      }
  
 -    private void report(Diagnostic diagnostic, CompilerMessageCategory severity, CompileContext compileContext) {
-+    private static BindingContext createBindingContext(List<JetNamespace> namespaces, CompileContext compileContext) {
-+        return AnalyzerFacade.analyzeNamespacesWithJavaIntegration(compileContext.getProject(), namespaces, Predicates.<PsiFile>alwaysTrue(), JetControlFlowDataTraceFactory.EMPTY);
-+    }
-+
-+    @NotNull
-+    private static List<JetNamespace> createNamespacesCopy(@NotNull VirtualFile[] allFiles, @NotNull CompileContext compileContext) {
-+        List<JetNamespace> namespaces = Lists.newArrayList();
-+        for (VirtualFile virtualFile : allFiles) {
-+            PsiFile psiFile = PsiManager.getInstance(compileContext.getProject()).findFile(virtualFile);
-+            if (psiFile instanceof JetFile) {
-+                namespaces.add(((JetFile) psiFile.copy()).getRootNamespace());
-+            }
-+        }
-+        return namespaces;
-+    }
-+
-+    @NotNull
-+    private static List<JetNamespace> getNamespaces(@NotNull VirtualFile[] allFiles, @NotNull CompileContext compileContext) {
-+        List<JetNamespace> namespaces = Lists.newArrayList();
-+        for (VirtualFile virtualFile : allFiles) {
-+            PsiFile psiFile = PsiManager.getInstance(compileContext.getProject()).findFile(virtualFile);
-+            if (psiFile instanceof JetFile) {
-+                namespaces.add(((JetFile) psiFile).getRootNamespace());
-+            }
-+        }
-+        return namespaces;
-+    }
-+
 +    private static void report(Diagnostic diagnostic, CompilerMessageCategory severity, CompileContext compileContext) {
          PsiFile psiFile = diagnostic.getFactory().getPsiFile(diagnostic);
          TextRange textRange = diagnostic.getFactory().getTextRange(diagnostic);
@@ -6022,7 +6087,7 @@ index 766868d..95a44a1 100644
          int line;
          int col;
          if (document != null) {
-@@ -169,18 +303,15 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -168,15 +285,12 @@ public class JetCompiler implements TranslatingCompiler {
              col = -1;
          }
          VirtualFile virtualFile = psiFile.getVirtualFile();
@@ -6041,27 +6106,44 @@ index 766868d..95a44a1 100644
 +    private static void report(CompilationException diagnostic, CompileContext compileContext) {
          PsiFile psiFile = diagnostic.getElement().getContainingFile();
          TextRange textRange = diagnostic.getElement().getTextRange();
--        Document document = psiFile.getViewProvider().getDocument();
-+        final Document document = PsiDocumentManager.getInstance(psiFile.getProject()).getDocument(psiFile.getContainingFile());
-         int line;
-         int col;
-         if (document != null) {
-@@ -192,12 +323,9 @@ public class JetCompiler implements TranslatingCompiler {
-             col = -1;
+         Document document = psiFile.getViewProvider().getDocument();
+@@ -199,7 +313,35 @@ public class JetCompiler implements TranslatingCompiler {
          }
-         VirtualFile virtualFile = psiFile.getVirtualFile();
--        if (virtualFile == null) {
--            compileContext.addMessage(ERROR, "[Internal Error] No virtual file for PsiFile. Diagnostic: " + diagnostic.getMessage(), "", -1, -1);
--        }
--        else {
--            compileContext.addMessage(ERROR, diagnostic.getMessage(), virtualFile.getUrl(), line + 1, col);
--        }
-+        compileContext.addMessage(ERROR, diagnostic.getMessage(), virtualFile == null
-+                                                                  ? "Synthetic file"
-+                                                                  : virtualFile.getUrl(), line + 1, col);
      }
  
- //    private static class ModuleCompileState {
+-//    private static class ModuleCompileState {
++    private static BindingContext createBindingContext(List<JetFile> files, CompileContext compileContext) {
++        return AnalyzerFacade.analyzeFilesWithJavaIntegration(compileContext.getProject(), files, Predicates.<PsiFile>alwaysTrue(), JetControlFlowDataTraceFactory.EMPTY);
++    }
++
++    @NotNull
++    private static List<JetFile> createFilesCopy(@NotNull VirtualFile[] allFiles, @NotNull CompileContext compileContext) {
++        List<JetFile> files = Lists.newArrayList();
++        for (VirtualFile virtualFile : allFiles) {
++            PsiFile psiFile = PsiManager.getInstance(compileContext.getProject()).findFile(virtualFile);
++            if (psiFile instanceof JetFile) {
++                files.add(((JetFile) psiFile.copy()));
++            }
++        }
++        return files;
++    }
++
++    @NotNull
++    private static List<JetFile> getJetFilesFromVirtualFiles(@NotNull VirtualFile[] allFiles, @NotNull CompileContext compileContext) {
++        List<JetFile> files = Lists.newArrayList();
++        for (VirtualFile virtualFile : allFiles) {
++            PsiFile psiFile = PsiManager.getInstance(compileContext.getProject()).findFile(virtualFile);
++            if (psiFile instanceof JetFile) {
++                files.add(((JetFile) psiFile));
++            }
++        }
++        return files;
++    }
++
++//   private static class ModuleCompileState {
+ //        private final GenerationState state;
+ //        private final CompileContext compileContext;
+ //        private final Module module;
 diff --git a/lib/xsom-20081112.jar b/lib/xsom-20081112.jar
 new file mode 100644
 index 0000000000000000000000000000000000000000..fa1a590530d0f76014cee220e4fdd0975467e12d
