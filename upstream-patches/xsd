@@ -4993,10 +4993,10 @@ index 0000000..4212d37
 \ No newline at end of file
 diff --git a/compiler/frontend.xsd/src/jet/xsd/shiporder.xsd b/compiler/frontend.xsd/src/jet/xsd/shiporder.xsd
 new file mode 100644
-index 0000000..5a45c45
+index 0000000..d040028
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/jet/xsd/shiporder.xsd
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,41 @@
 +<?xml version="1.0" ?>
 +<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
 +    <xs:element name="shiporder">
@@ -5026,14 +5026,13 @@ index 0000000..5a45c45
 +                    </xs:complexType>
 +                </xs:element>
 +
-+                <!--<xs:element name="datetime">-->
-+                    <!--<xs:complexType>-->
-+                        <!--<xs:sequence>-->
-+                            <!--<xs:element name="Date" type="xs:date"/>-->
-+                            <!--<xs:element name="Time" type="xs:time"/>-->
-+                        <!--</xs:sequence>-->
-+                    <!--</xs:complexType>-->
-+                <!--</xs:element>-->
++                <xs:element name="if">
++                    <xs:complexType>
++                        <xs:sequence>
++                            <xs:element name="value" type="xs:string"/>
++                        </xs:sequence>
++                    </xs:complexType>
++                </xs:element>
 +            </xs:sequence>
 +            <xs:attribute name="orderid" type="xs:string" use="required"/>
 +        </xs:complexType>
@@ -5206,15 +5205,16 @@ index 0000000..a3119e1
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java
 new file mode 100644
-index 0000000..3472c40
+index 0000000..ae58d13
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/XsdVisitor.java
-@@ -0,0 +1,181 @@
+@@ -0,0 +1,206 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k;
 +
 +import com.google.common.base.Joiner;
 +import com.sun.xml.xsom.*;
 +import com.sun.xml.xsom.impl.util.SchemaTreeTraverser;
++import org.jetbrains.annotations.NotNull;
 +
 +import java.util.*;
 +
@@ -5229,6 +5229,15 @@ index 0000000..3472c40
 +    private final static String N2 = N + N;
 +    private final static Map<String, String> typeMap = initializeTypeMap();
 +    private final StringBuilder classesBuilder;
++    private static final String BACKTICK = "`";
++
++    @NotNull
++    final static Set<String> KOTLIN_KEYWORDS = new HashSet<String>(Arrays.asList(
++            "package", "as", "type", "class", "this", "super", "val", "var",
++            "fun", "for", "null", "true", "false", "is", "in", "throw",
++            "return", "break", "continue", "object", "if", "try", "else",
++            "while", "do", "when", "trait", "This"
++    ));
 +
 +    public String getClasses() {
 +        return classesBuilder.toString();
@@ -5312,7 +5321,8 @@ index 0000000..3472c40
 +    public void simpleType(final XSSimpleType type) {
 +        XSSimpleType simpleBaseType = type.asRestriction().getSimpleBaseType();
 +        if (simpleBaseType != null) {
-+            classesBuilder.append("class" + " " + type.getName() + "(" + "value : " + getType(simpleBaseType, "value", false, false) + ")" + N);
++            String name = quoteIfNeeded(type.getName());
++            classesBuilder.append("class" + " " + name + "(" + "value : " + getType(simpleBaseType, "value", false, false) + ")" + N);
 +        }
 +    }
 +
@@ -5322,7 +5332,7 @@ index 0000000..3472c40
 +    }
 +
 +    private static String createClassDeclaration(final String name, final List<String> vars) {
-+        return "class" + " " + upperFirst(name) + "(" + N + JOINER.join(vars) + N + ")" + " " + "{" + N +
++        return "class" + " " + quoteIfNeeded(upperFirst(name)) + "(" + N + JOINER.join(vars) + N + ")" + " " + "{" + N +
 +               "    fun toXML() = \"<XML>\"" + N +
 +               "}" + N;
 +    }
@@ -5336,9 +5346,10 @@ index 0000000..3472c40
 +                final boolean isMultiply = c.getMaxOccurs() == -1;
 +                final String maybeList = isMultiply ? "List" : "";
 +                String var = isMultiply ? "val" : "var";
++                String name = quoteIfNeeded(elementDecl.getName());
 +                arguments.add(
-+                        OFFSET + var + " " + elementDecl.getName() + maybeList + " : " +
-+                        getType(elementDecl.getType(), elementDecl.getName(), isMultiply, isNullable)
++                        OFFSET + var + " " + name + maybeList + " : " +
++                        getType(elementDecl.getType(), name, isMultiply, isNullable)
 +                );
 +            }
 +        }
@@ -5390,13 +5401,26 @@ index 0000000..3472c40
 +        return string;
 +//        return string.substring(0, 1).toUpperCase() + string.substring(1);
 +    }
++
++    @NotNull
++    private static String quote(String str) {
++        return BACKTICK + str + BACKTICK;
++    }
++
++
++    private static String quoteIfNeeded(String string) {
++        if ((KOTLIN_KEYWORDS.contains(string) || string.contains("$"))) {
++            return quote(string);
++        }
++        return string;
++    }
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java
 new file mode 100644
-index 0000000..34d7dff
+index 0000000..38b8ef9
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java
-@@ -0,0 +1,107 @@
+@@ -0,0 +1,111 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k.changers;
 +
 +import com.google.common.base.Joiner;
@@ -5503,10 +5527,14 @@ index 0000000..34d7dff
 +    public static boolean fromXSD(@NotNull String namespaceName) {
 +        return XsdScope.isImported(namespaceName);
 +    }
++
++    protected static String unquote(String string) {
++        return string.replaceAll("`", "");
++    }
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java
 new file mode 100644
-index 0000000..1ec9260
+index 0000000..565b16f
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java
 @@ -0,0 +1,105 @@
@@ -5563,7 +5591,7 @@ index 0000000..1ec9260
 +                    else { // setAttribute
 +                        actions.add("setAttribute");
 +                    }
-+                    names.add(p.getName());
++                    names.add(unquote(p.getName()));
 +                }
 +            }
 +            List<? extends ValueArgument> valueArguments = expression.getValueArguments();
@@ -5573,7 +5601,7 @@ index 0000000..1ec9260
 +                    values.add(argumentExpression.getText());
 +                }
 +            }
-+            String text = "Element" + LBRACE + Q + calleeExpression.getText() + Q + RBRACE + createChainOfSetAttribute(names, values, actions);
++            String text = "Element" + LBRACE + Q + unquote(calleeExpression.getText()) + Q + RBRACE + createChainOfSetAttribute(names, values, actions);
 +            expression.replace(JetPsiFactory.createExpression(expression.getProject(), text));
 +        }
 +        super.visitCallExpression(expression);
@@ -5647,7 +5675,7 @@ index 0000000..fbdb859
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java
 new file mode 100644
-index 0000000..a0f3823
+index 0000000..9219b35
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java
 @@ -0,0 +1,64 @@
@@ -5703,12 +5731,12 @@ index 0000000..a0f3823
 +                receiver.accept(visitor);
 +                visitor.apply();
 +                String receiverText = expression.getReceiverExpression().getText();
-+                action = format("as{0}({1}?.getChildText(\"{2}\")){3}", selectorType, receiverText, selector.getText(), sureIfNeeded);
++                action = format("as{0}({1}?.getChildText(\"{2}\")){3}", selectorType, receiverText, unquote(selector.getText()), sureIfNeeded);
 +                if (isList(selectorType)) {
-+                    action = format("({0}?.getChildren(\"{1}\") as List<org.jdom.Element?>)", receiverText, selector.getText().replace("List", ""));
++                    action = format("({0}?.getChildren(\"{1}\") as List<org.jdom.Element?>)", receiverText, unquote(selector.getText().replace("List", "")));
 +                }
 +                else if (isChild(selectorType)) {
-+                    action = format("({0}?.getChild(\"{1}\") as org.jdom.Element?)", receiverText, selector.getText());
++                    action = format("({0}?.getChild(\"{1}\") as org.jdom.Element?)", receiverText, unquote(selector.getText()));
 +                }
 +            }
 +        }
@@ -5717,10 +5745,10 @@ index 0000000..a0f3823
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java
 new file mode 100644
-index 0000000..30888b0
+index 0000000..b4d4486
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java
-@@ -0,0 +1,113 @@
+@@ -0,0 +1,114 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k.changers;
 +
 +import com.intellij.openapi.util.Pair;
@@ -5776,16 +5804,13 @@ index 0000000..30888b0
 +                        right.acceptChildren(visitorForRight);
 +                        visitorForRight.apply();
 +
-+                        XsdGetterChanger visitorForReceiver = new XsdGetterChanger(bindingContext);
-+                        receiver.accept(visitorForReceiver);
-+                        visitorForReceiver.apply();
-+                        String receiverText = ((JetQualifiedExpression) expression.getLeft()).getReceiverExpression().getText();
++                        String receiverText = convertReceiver(expression, receiver);
 +
-+                        String action = format("setContent(\"{0}\", {1})", selector.getText(), right.getText());
++                        String action = format("setContent(\"{0}\", {1})", unquote(selector.getText()), right.getText());
 +                        JetExpression r = expression.getRight();
 +                        JetType rightType = bindingContext.get(BindingContext.EXPRESSION_TYPE, r);
 +                        if (isChild(selectorType) && isChild(rightType)) {
-+                            action = format("setContent({0})", right.getText());
++                            action = format("setOrUpdateContent({0})", unquote(right.getText()));
 +                        }
 +                        replaces.add(new Pair<JetExpression, JetExpression>(
 +                                expression,
@@ -5814,14 +5839,11 @@ index 0000000..30888b0
 +
 +                        String newLeft = new XsdGetterChanger(bindingContext).createAction((JetQualifiedExpression) left);
 +
-+                        XsdGetterChanger visitorForReceiver = new XsdGetterChanger(bindingContext);
-+                        receiver.accept(visitorForReceiver);
-+                        visitorForReceiver.apply();
-+                        String receiverText = ((JetQualifiedExpression) expression.getLeft()).getReceiverExpression().getText();
++                        String receiverText = convertReceiver(expression, receiver);
 +
-+                        String action = format("setContent(\"{0}\", {1} {2} {3})", selector.getText(), newLeft, operation, right.getText());
++                        String action = format("setContent(\"{0}\", {1} {2} {3})", unquote(selector.getText()), newLeft, operation, right.getText());
 +                        if (isChild(selectorType)) {
-+                            action = format("setContent({0})", right.getText());
++                            action = format("setOrUpdateContent({0})", unquote(right.getText()));
 +                        }
 +                        replaces.add(new Pair<JetExpression, JetExpression>(
 +                                expression,
@@ -5832,6 +5854,13 @@ index 0000000..30888b0
 +            }
 +        }
 +        expression.acceptChildren(new XsdGetterChanger(bindingContext));
++    }
++
++    private String convertReceiver(JetBinaryExpression expression, JetExpression receiver) {
++        XsdGetterChanger visitorForReceiver = new XsdGetterChanger(bindingContext);
++        receiver.accept(visitorForReceiver);
++        visitorForReceiver.apply();
++        return ((JetQualifiedExpression) expression.getLeft()).getReceiverExpression().getText();
 +    }
 +}
 diff --git a/compiler/frontend/src/org/jetbrains/jet/lang/psi/JetPsiFactory.java b/compiler/frontend/src/org/jetbrains/jet/lang/psi/JetPsiFactory.java
