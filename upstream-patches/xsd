@@ -5534,13 +5534,14 @@ index 0000000..38b8ef9
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java
 new file mode 100644
-index 0000000..565b16f
+index 0000000..fcd213e
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdConstructorChanger.java
-@@ -0,0 +1,105 @@
+@@ -0,0 +1,111 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k.changers;
 +
 +import com.google.common.base.Joiner;
++import com.intellij.openapi.util.Pair;
 +import org.jetbrains.annotations.NotNull;
 +import org.jetbrains.jet.lang.descriptors.CallableDescriptor;
 +import org.jetbrains.jet.lang.descriptors.ConstructorDescriptor;
@@ -5575,6 +5576,11 @@ index 0000000..565b16f
 +    }
 +
 +    @Override
++    public void visitJetElement(JetElement element) {
++        element.acceptChildren(this);
++    }
++
++    @Override
 +    public void visitCallExpression(JetCallExpression expression) {
 +        if (isXsdClassConstructorInvocation(expression, bindingContext)) {
 +            JetExpression calleeExpression = expression.getCalleeExpression();
@@ -5602,7 +5608,7 @@ index 0000000..565b16f
 +                }
 +            }
 +            String text = "Element" + LBRACE + Q + unquote(calleeExpression.getText()) + Q + RBRACE + createChainOfSetAttribute(names, values, actions);
-+            expression.replace(JetPsiFactory.createExpression(expression.getProject(), text));
++            replaces.add(new Pair<JetExpression, JetExpression>(expression, JetPsiFactory.createExpression(expression.getProject(), text)));
 +        }
 +        super.visitCallExpression(expression);
 +    }
@@ -5745,10 +5751,10 @@ index 0000000..9219b35
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java
 new file mode 100644
-index 0000000..b4d4486
+index 0000000..62e818e
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java
-@@ -0,0 +1,114 @@
+@@ -0,0 +1,122 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k.changers;
 +
 +import com.intellij.openapi.util.Pair;
@@ -5804,7 +5810,15 @@ index 0000000..b4d4486
 +                        right.acceptChildren(visitorForRight);
 +                        visitorForRight.apply();
 +
++                        XsdConstructorChanger visitorForRight2 = new XsdConstructorChanger((bindingContext));
++                        right.accept(visitorForRight2);
++                        visitorForRight2.apply();
++
 +                        String receiverText = convertReceiver(expression, receiver);
++
++                        receiver = ((JetQualifiedExpression) left).getReceiverExpression();
++                        selector = ((JetQualifiedExpression) left).getSelectorExpression();
++                        right = expression.getRight();
 +
 +                        String action = format("setContent(\"{0}\", {1})", unquote(selector.getText()), right.getText());
 +                        JetExpression r = expression.getRight();
@@ -5890,7 +5904,7 @@ index 061858a..9feed91 100644
  </module>
  
 diff --git a/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java b/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
-index 5b27515..b8515fc 100644
+index 5b27515..38041ac 100644
 --- a/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
 +++ b/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
 @@ -12,6 +12,7 @@ import com.intellij.openapi.module.Module;
@@ -5919,7 +5933,7 @@ index 5b27515..b8515fc 100644
  import java.util.List;
  
  import static com.intellij.openapi.compiler.CompilerMessageCategory.ERROR;
-@@ -61,51 +69,151 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -61,51 +69,165 @@ public class JetCompiler implements TranslatingCompiler {
              return;
          }
  
@@ -6000,6 +6014,23 @@ index 5b27515..b8515fc 100644
 +                                    f.accept(visitor);
 +                                    visitor.apply();
 +                                }
+                             }
+-                            else {
+-                                compileContext.addMessage(CompilerMessageCategory.ERROR, exception.getClass().getCanonicalName() + ": " + exception.getMessage(), fileUrl, 0, 0);
++                        });
++                    }
++                });
++                SwingUtilities.invokeAndWait(new Runnable() {
++                    @Override
++                    public void run() {
++                        ApplicationManager.getApplication().runWriteAction(new Runnable() {
++                            @Override
++                            public void run() {
++                                for (final JetFile f : files[0]) {
++                                    XsdConstructorChanger visitor = new XsdConstructorChanger(bindingContexts[0]);
++                                    f.accept(visitor);
++                                    visitor.apply();
++                                }
 +                            }
 +                        });
 +                    }
@@ -6016,8 +6047,6 @@ index 5b27515..b8515fc 100644
 +                                    visitor.apply();
 +                                }
                              }
--                            else {
--                                compileContext.addMessage(CompilerMessageCategory.ERROR, exception.getClass().getCanonicalName() + ": " + exception.getMessage(), fileUrl, 0, 0);
 +                        });
 +                    }
 +                });
@@ -6028,7 +6057,6 @@ index 5b27515..b8515fc 100644
 +                            @Override
 +                            public void run() {
 +                                for (final JetFile f : files[0]) {
-+                                    f.accept(new XsdConstructorChanger(bindingContexts[0]));
 +                                    f.accept(new XsdCommonChanger(bindingContexts[0]));
 +                                    String packageName = f.getNamespaceHeader().getName();
 +                                    if (packageName != null && packageName.equals("xsd_test2")) {
@@ -6037,7 +6065,7 @@ index 5b27515..b8515fc 100644
 +                                        // System.out.println(DebugUtil.psiToString(f, false));
 +                                    }
 +                                }
-                             }
++                            }
 +                        });
 +                    }
 +                });
@@ -6099,7 +6127,7 @@ index 5b27515..b8515fc 100644
  ///////////
  //                    GenerationState generationState2 = new GenerationState(compileContext.getProject(), ClassBuilderFactory.TEXT);
  //                    generationState2.compileCorrectFiles(bindingContext, namespaces);
-@@ -121,20 +229,30 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -121,20 +243,30 @@ public class JetCompiler implements TranslatingCompiler {
  ///////////
  
  
@@ -6141,7 +6169,7 @@ index 5b27515..b8515fc 100644
  //        Map<Module, ModuleCompileState> moduleMap = new HashMap<Module, ModuleCompileState>();
  //
  //        for (VirtualFile virtualFile : virtualFiles) {
-@@ -151,12 +269,13 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -151,12 +283,13 @@ public class JetCompiler implements TranslatingCompiler {
  //            state.done();
  //        }
  
@@ -6157,7 +6185,7 @@ index 5b27515..b8515fc 100644
          int line;
          int col;
          if (document != null) {
-@@ -168,15 +287,12 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -168,15 +301,12 @@ public class JetCompiler implements TranslatingCompiler {
              col = -1;
          }
          VirtualFile virtualFile = psiFile.getVirtualFile();
@@ -6177,7 +6205,7 @@ index 5b27515..b8515fc 100644
          PsiFile psiFile = diagnostic.getElement().getContainingFile();
          TextRange textRange = diagnostic.getElement().getTextRange();
          Document document = psiFile.getViewProvider().getDocument();
-@@ -199,7 +315,35 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -199,7 +329,35 @@ public class JetCompiler implements TranslatingCompiler {
          }
      }
  
