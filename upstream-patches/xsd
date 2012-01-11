@@ -11,7 +11,7 @@ index 9c559c5..15f11ba 100644
        <module fileurl="file://$PROJECT_DIR$/idea/idea.iml" filepath="$PROJECT_DIR$/idea/idea.iml" />
        <module fileurl="file://$PROJECT_DIR$/stdlib/stdlib.iml" filepath="$PROJECT_DIR$/stdlib/stdlib.iml" />
 diff --git a/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java b/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java
-index 55f60c9..facd398 100644
+index 75f29f3..e718fc7 100644
 --- a/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java
 +++ b/compiler/backend/src/org/jetbrains/jet/codegen/ExpressionCodegen.java
 @@ -806,7 +806,8 @@ public class ExpressionCodegen extends JetVisitor<StackValue, StackValue> {
@@ -5393,13 +5393,14 @@ index 0000000..3472c40
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java
 new file mode 100644
-index 0000000..87778d7
+index 0000000..34d7dff
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java
-@@ -0,0 +1,98 @@
+@@ -0,0 +1,107 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k.changers;
 +
 +import com.google.common.base.Joiner;
++import com.intellij.openapi.util.Pair;
 +import org.jetbrains.annotations.NotNull;
 +import org.jetbrains.annotations.Nullable;
 +import org.jetbrains.jet.lang.descriptors.DeclarationDescriptor;
@@ -5427,8 +5428,16 @@ index 0000000..87778d7
 +
 +    BindingContext bindingContext;
 +
++    protected List<Pair<JetExpression, JetExpression>> replaces = new LinkedList<Pair<JetExpression, JetExpression>>();
++
 +    public XsdCommonChanger(BindingContext bindingContext) {
 +        this.bindingContext = bindingContext;
++    }
++
++    public void apply() {
++        for (Pair<JetExpression, JetExpression> p : replaces) {
++            p.getFirst().replace(p.getSecond());
++        }
 +    }
 +
 +    @Override
@@ -5458,11 +5467,11 @@ index 0000000..87778d7
 +        return typeConstructor.toString().equals("List") && typeConstructor.getParameters().size() == 1;
 +    }
 +
++
 +    @Override
 +    public void visitJetElement(JetElement element) {
 +        element.acceptChildren(this);
 +    }
-+
 +
 +    @Override
 +    public void visitJetFile(JetFile file) {
@@ -5638,15 +5647,19 @@ index 0000000..fbdb859
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java
 new file mode 100644
-index 0000000..372a065
+index 0000000..a0f3823
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdGetterChanger.java
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,64 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k.changers;
 +
++import com.intellij.openapi.util.Pair;
 +import org.jetbrains.jet.lang.psi.*;
 +import org.jetbrains.jet.lang.resolve.BindingContext;
 +import org.jetbrains.jet.lang.types.JetType;
++
++import java.util.LinkedList;
++import java.util.List;
 +
 +import static java.text.MessageFormat.format;
 +
@@ -5660,7 +5673,7 @@ index 0000000..372a065
 +
 +    @Override
 +    public void visitExpression(JetExpression expression) {
-+        super.visitExpression(expression);
++        expression.acceptChildren(this);
 +    }
 +
 +    @Override
@@ -5672,7 +5685,7 @@ index 0000000..372a065
 +    public void visitDotQualifiedExpression(JetDotQualifiedExpression expression) {
 +        String action = createAction(expression);
 +        if (!action.isEmpty()) {
-+            expression.replace(JetPsiFactory.createExpression(expression.getProject(), action));
++            replaces.add(new Pair<JetExpression, JetExpression>(expression, JetPsiFactory.createExpression(expression.getProject(), action)));
 +        }
 +        super.visitDotQualifiedExpression(expression);
 +    }
@@ -5686,12 +5699,16 @@ index 0000000..372a065
 +        if (fromXSD(receiverType)) {
 +            if (selector != null && selectorType != null && !selector.getText().equals("toXML()")) {
 +                String sureIfNeeded = selectorType.isNullable() ? "" : ".sure()";
-+                action = format("as{0}({1}?.getChildText(\"{2}\")){3}", selectorType, receiver.getText(), selector.getText(), sureIfNeeded);
++                XsdGetterChanger visitor = new XsdGetterChanger(bindingContext);
++                receiver.accept(visitor);
++                visitor.apply();
++                String receiverText = expression.getReceiverExpression().getText();
++                action = format("as{0}({1}?.getChildText(\"{2}\")){3}", selectorType, receiverText, selector.getText(), sureIfNeeded);
 +                if (isList(selectorType)) {
-+                    action = format("({0}?.getChildren(\"{1}\") as List<org.jdom.Element?>)", receiver.getText(), selector.getText().replace("List", ""));
++                    action = format("({0}?.getChildren(\"{1}\") as List<org.jdom.Element?>)", receiverText, selector.getText().replace("List", ""));
 +                }
 +                else if (isChild(selectorType)) {
-+                    action = format("({0}?.getChild(\"{1}\") as org.jdom.Element?)", receiver.getText(), selector.getText());
++                    action = format("({0}?.getChild(\"{1}\") as org.jdom.Element?)", receiverText, selector.getText());
 +                }
 +            }
 +        }
@@ -5700,22 +5717,23 @@ index 0000000..372a065
 +}
 diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java
 new file mode 100644
-index 0000000..cb99076
+index 0000000..30888b0
 --- /dev/null
 +++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdSetterChanger.java
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,113 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k.changers;
 +
 +import com.intellij.openapi.util.Pair;
-+import com.intellij.psi.PsiElement;
 +import org.jetbrains.jet.lang.psi.JetBinaryExpression;
 +import org.jetbrains.jet.lang.psi.JetExpression;
 +import org.jetbrains.jet.lang.psi.JetQualifiedExpression;
 +import org.jetbrains.jet.lang.resolve.BindingContext;
 +import org.jetbrains.jet.lang.types.JetType;
 +
++import java.util.HashMap;
 +import java.util.LinkedList;
 +import java.util.List;
++import java.util.Map;
 +
 +import static java.text.MessageFormat.format;
 +import static org.jetbrains.jet.lang.psi.JetPsiFactory.createExpression;
@@ -5728,17 +5746,23 @@ index 0000000..cb99076
 +        super(bindingContext);
 +    }
 +
-+    List<Pair<JetExpression, JetExpression>> replaces = new LinkedList<Pair<JetExpression, JetExpression>>();
++    private Map<String, String> operations = initOperations();
 +
-+    public void apply() {
-+        for (Pair<JetExpression, JetExpression> p : replaces) {
-+            p.getFirst().replace(p.getSecond());
-+        }
++    private static HashMap<String, String> initOperations() {
++        HashMap<String, String> map = new HashMap<String, String>();
++        map.put("PLUSEQ", "+");
++        map.put("MINUSEQ", "-");
++        map.put("MULTEQ", "*");
++        map.put("DIVEQ", "/");
++        map.put("PERCEQ", "%");
++        return map;
 +    }
 +
 +    @Override
 +    public void visitBinaryExpression(JetBinaryExpression expression) {
-+        if (expression.getOperationToken().toString().equals("EQ")) {
++        String operationString = expression.getOperationToken().toString();
++        // =
++        if (operationString.equals("EQ")) {
 +            JetExpression left = expression.getLeft();
 +            JetExpression right = expression.getRight();
 +            if (left instanceof JetQualifiedExpression) {
@@ -5748,20 +5772,32 @@ index 0000000..cb99076
 +                JetType selectorType = bindingContext.get(BindingContext.EXPRESSION_TYPE, selector);
 +                if (fromXSD(receiverType)) {
 +                    if (selector != null && right != null) {
-+                        right.accept(new XsdGetterChanger(bindingContext));
++                        XsdGetterChanger visitorForRight = new XsdGetterChanger((bindingContext));
++                        right.acceptChildren(visitorForRight);
++                        visitorForRight.apply();
++
++                        XsdGetterChanger visitorForReceiver = new XsdGetterChanger(bindingContext);
++                        receiver.accept(visitorForReceiver);
++                        visitorForReceiver.apply();
++                        String receiverText = ((JetQualifiedExpression) expression.getLeft()).getReceiverExpression().getText();
++
 +                        String action = format("setContent(\"{0}\", {1})", selector.getText(), right.getText());
-+                        if (isChild(selectorType)) {
++                        JetExpression r = expression.getRight();
++                        JetType rightType = bindingContext.get(BindingContext.EXPRESSION_TYPE, r);
++                        if (isChild(selectorType) && isChild(rightType)) {
 +                            action = format("setContent({0})", right.getText());
 +                        }
 +                        replaces.add(new Pair<JetExpression, JetExpression>(
 +                                expression,
-+                                createExpression(expression.getProject(), receiver.getText() + QUEST_DOT + action)
++                                createExpression(expression.getProject(), receiverText + QUEST_DOT + action)
 +                        ));
 +                    }
 +                }
 +            }
 +        }
-+        else if (expression.getOperationToken().toString().equals("PLUSEQ")) {
++        // +=, -=, *=, /=, %=
++        else if (operations.containsKey(operationString)) {
++            String operation = operations.get(operationString);
 +            JetExpression left = expression.getLeft();
 +            JetExpression right = expression.getRight();
 +            if (left instanceof JetQualifiedExpression) {
@@ -5771,28 +5807,31 @@ index 0000000..cb99076
 +                JetType selectorType = bindingContext.get(BindingContext.EXPRESSION_TYPE, selector);
 +                if (fromXSD(receiverType)) {
 +                    if (selector != null && right != null) {
-+                        String newRight = "";
-+                        if (right instanceof JetQualifiedExpression) {
-+                            newRight = new XsdGetterChanger(bindingContext).createAction((JetQualifiedExpression) right);
-+                        }
-+                        else {
-+                            right.accept(new XsdGetterChanger((bindingContext)));
-+                            newRight = right.getText();
-+                        }
++
++                        XsdGetterChanger visitor = new XsdGetterChanger((bindingContext));
++                        right.acceptChildren(visitor);
++                        visitor.apply();
++
 +                        String newLeft = new XsdGetterChanger(bindingContext).createAction((JetQualifiedExpression) left);
-+                        String action = format("setContent(\"{0}\", {1} + {2})", selector.getText(), newLeft, newRight);
++
++                        XsdGetterChanger visitorForReceiver = new XsdGetterChanger(bindingContext);
++                        receiver.accept(visitorForReceiver);
++                        visitorForReceiver.apply();
++                        String receiverText = ((JetQualifiedExpression) expression.getLeft()).getReceiverExpression().getText();
++
++                        String action = format("setContent(\"{0}\", {1} {2} {3})", selector.getText(), newLeft, operation, right.getText());
 +                        if (isChild(selectorType)) {
 +                            action = format("setContent({0})", right.getText());
 +                        }
 +                        replaces.add(new Pair<JetExpression, JetExpression>(
 +                                expression,
-+                                createExpression(expression.getProject(), receiver.getText() + QUEST_DOT + action)
++                                createExpression(expression.getProject(), receiverText + QUEST_DOT + action)
 +                        ));
 +                    }
 +                }
 +            }
 +        }
-+        super.visitBinaryExpression(expression);
++        expression.acceptChildren(new XsdGetterChanger(bindingContext));
 +    }
 +}
 diff --git a/compiler/frontend/src/org/jetbrains/jet/lang/psi/JetPsiFactory.java b/compiler/frontend/src/org/jetbrains/jet/lang/psi/JetPsiFactory.java
@@ -5822,7 +5861,7 @@ index 061858a..9feed91 100644
  </module>
  
 diff --git a/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java b/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
-index 5b27515..12fedc5 100644
+index 5b27515..b8515fc 100644
 --- a/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
 +++ b/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
 @@ -12,6 +12,7 @@ import com.intellij.openapi.module.Module;
@@ -5851,7 +5890,7 @@ index 5b27515..12fedc5 100644
  import java.util.List;
  
  import static com.intellij.openapi.compiler.CompilerMessageCategory.ERROR;
-@@ -61,51 +69,149 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -61,51 +69,151 @@ public class JetCompiler implements TranslatingCompiler {
              return;
          }
  
@@ -5943,7 +5982,9 @@ index 5b27515..12fedc5 100644
 +                            @Override
 +                            public void run() {
 +                                for (final JetFile f : files[0]) {
-+                                    f.accept(new XsdGetterChanger(bindingContexts[0]));
++                                    XsdGetterChanger visitor = new XsdGetterChanger(bindingContexts[0]);
++                                    f.accept(visitor);
++                                    visitor.apply();
 +                                }
                              }
 -                            else {
@@ -6029,7 +6070,7 @@ index 5b27515..12fedc5 100644
  ///////////
  //                    GenerationState generationState2 = new GenerationState(compileContext.getProject(), ClassBuilderFactory.TEXT);
  //                    generationState2.compileCorrectFiles(bindingContext, namespaces);
-@@ -121,20 +227,30 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -121,20 +229,30 @@ public class JetCompiler implements TranslatingCompiler {
  ///////////
  
  
@@ -6071,7 +6112,7 @@ index 5b27515..12fedc5 100644
  //        Map<Module, ModuleCompileState> moduleMap = new HashMap<Module, ModuleCompileState>();
  //
  //        for (VirtualFile virtualFile : virtualFiles) {
-@@ -151,12 +267,13 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -151,12 +269,13 @@ public class JetCompiler implements TranslatingCompiler {
  //            state.done();
  //        }
  
@@ -6087,7 +6128,7 @@ index 5b27515..12fedc5 100644
          int line;
          int col;
          if (document != null) {
-@@ -168,15 +285,12 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -168,15 +287,12 @@ public class JetCompiler implements TranslatingCompiler {
              col = -1;
          }
          VirtualFile virtualFile = psiFile.getVirtualFile();
@@ -6107,7 +6148,7 @@ index 5b27515..12fedc5 100644
          PsiFile psiFile = diagnostic.getElement().getContainingFile();
          TextRange textRange = diagnostic.getElement().getTextRange();
          Document document = psiFile.getViewProvider().getDocument();
-@@ -199,7 +313,35 @@ public class JetCompiler implements TranslatingCompiler {
+@@ -199,7 +315,35 @@ public class JetCompiler implements TranslatingCompiler {
          }
      }
  
