@@ -5415,12 +5415,12 @@ index 0000000..ae58d13
 +        return string;
 +    }
 +}
-diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java
+diff --git a/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdChanger.java b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdChanger.java
 new file mode 100644
-index 0000000..e32f2cb
+index 0000000..eaf3fdf
 --- /dev/null
-+++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdCommonChanger.java
-@@ -0,0 +1,337 @@
++++ b/compiler/frontend.xsd/src/org/jetbrains/jet/lang/resolve/xsd2k/changers/XsdChanger.java
+@@ -0,0 +1,325 @@
 +package org.jetbrains.jet.lang.resolve.xsd2k.changers;
 +
 +import com.google.common.base.Joiner;
@@ -5444,19 +5444,7 @@ index 0000000..e32f2cb
 +/**
 + * @author ignatov
 + */
-+public class XsdCommonChanger extends JetVisitorVoid {
-+    @NotNull
-+    private static final String COMMA_SPACE = ", ";
-+    @NotNull
-+    private static final String LBRACE = "(";
-+    @NotNull
-+    private static final String RBRACE = ")";
-+    @NotNull
-+    private static final String Q = "\"";
-+    @NotNull
-+    private static final String DOT = ".";
-+    @NotNull
-+    private static final String QUEST_DOT = "?.";
++public class XsdChanger extends JetVisitorVoid {
 +    @NotNull
 +    private static final Map<String, String> operations = initOperations();
 +
@@ -5476,7 +5464,7 @@ index 0000000..e32f2cb
 +    @NotNull
 +    private final ArrayList<Pair<JetElement, JetElement>> replaces = new ArrayList<Pair<JetElement, JetElement>>();
 +
-+    public XsdCommonChanger(BindingContext bindingContext) {
++    public XsdChanger(BindingContext bindingContext) {
 +        this.bindingContext = bindingContext;
 +    }
 +
@@ -5550,7 +5538,7 @@ index 0000000..e32f2cb
 +                        }
 +                        replaces.add(new Pair<JetElement, JetElement>(
 +                                expression,
-+                                createExpression(expression.getProject(), receiverText + QUEST_DOT + action)
++                                createExpression(expression.getProject(), receiverText + "?." + action)
 +                        ));
 +                    }
 +                }
@@ -5578,7 +5566,7 @@ index 0000000..e32f2cb
 +                        }
 +                        replaces.add(new Pair<JetElement, JetElement>(
 +                                expression,
-+                                createExpression(expression.getProject(), receiverText + QUEST_DOT + action)
++                                createExpression(expression.getProject(), receiverText + "?." + action)
 +                        ));
 +                    }
 +                }
@@ -5609,13 +5597,13 @@ index 0000000..e32f2cb
 +        if (declarationDescriptor instanceof ConstructorDescriptor) {
 +            for (ValueParameterDescriptor p : ((ConstructorDescriptor) declarationDescriptor).getValueParameters()) {
 +                // addContent
-+                if (isChild(p.getOutType())) {
-+                    actions.add("addContent");
-+                }
++//                if (isChild(p.getOutType())) {
++                actions.add("addContent");
++//                }
 +                // setAttribute
-+                else {
-+                    actions.add("setAttribute");
-+                }
++//                else {
++//                    actions.add("setAttribute");
++//                }
 +                names.add(unquote(p.getName()));
 +            }
 +        }
@@ -5661,30 +5649,30 @@ index 0000000..e32f2cb
 +            int size = names.size();
 +            for (int i = 0; i < size; i++) {
 +                if (actions.get(i).equals("addContent")) {
-+                    result.add("addContent" + LBRACE + values.get(i) + RBRACE);
++                    result.add(format("addContent({0})", values.get(i)));
 +                }
 +                else {
-+                    result.add("setAttribute" + LBRACE + Q + names.get(i) + Q + COMMA_SPACE + quoteIfNeeded(values.get(i)) + RBRACE);
++                    result.add(format("setAttribute(\"{0}\", {1})", names.get(i), quoteIfNeeded(values.get(i))));
 +                }
 +            }
-+            return "." + Joiner.on(QUEST_DOT).join(result);
++            return "." + Joiner.on("?.").join(result);
 +        }
 +        return "";
 +    }
 +
 +    @NotNull
 +    private static String quoteIfNeeded(@NotNull String string) {
-+        if (string.startsWith(Q) && string.startsWith(Q)) {
++        if (string.startsWith("\"") && string.startsWith("\"")) {
 +            return string;
 +        }
-+        return Q + string + Q;
++        return "\"" + string + "\"";
 +    }
 +
 +    private static boolean isChild(@Nullable JetType type) {
 +        if (type == null) {
 +            return false;
 +        }
-+        if (XsdVisitor.getInternalTypes().contains(type.toString())) {
++        if (XsdVisitor.getInternalTypes().contains(type.toString().replace("?", ""))) {
 +            return false;
 +        }
 +        return true;
@@ -5710,7 +5698,7 @@ index 0000000..e32f2cb
 +                modifyExpression(receiver);
 +                String receiverText = expression.getReceiverExpression().getText();
 +                String selectorText = unquote(selector.getText());
-+                action = format("as{0}({1}?.getChildText(\"{2}\")){3}", selectorType, receiverText, selectorText, sureIfNeeded);
++                action = format("as{0}({1}?.getChildText(\"{2}\")){3}", selectorType.toString().replace("?", ""), receiverText, selectorText, sureIfNeeded);
 +                if (isList(selectorType)) {
 +                    action = format("({0}?.getChildren(\"{1}\") as List<org.jdom.Element?>)", receiverText, selectorText.replace("List", ""));
 +                }
@@ -5723,7 +5711,7 @@ index 0000000..e32f2cb
 +    }
 +
 +    private void modifyExpression(@NotNull JetExpression receiver) {
-+        XsdCommonChanger visitor = new XsdCommonChanger(bindingContext);
++        XsdChanger visitor = new XsdChanger(bindingContext);
 +        receiver.accept(visitor);
 +        visitor.apply();
 +    }
@@ -5747,7 +5735,7 @@ index 0000000..e32f2cb
 +            }
 +            declarationDescriptor = declarationDescriptor.getContainingDeclaration();
 +        }
-+        return Joiner.on(DOT).join(namespaceNames);
++        return Joiner.on(".").join(namespaceNames);
 +    }
 +
 +    private static boolean fromXSD(@NotNull String namespaceName) {
@@ -5780,12 +5768,13 @@ index ab661ef..3a9154d 100644
      <orderEntry type="module" module-name="frontend.java" />
      <orderEntry type="module" module-name="stdlib" />
      <orderEntry type="module" module-name="compiler-tests" />
+     <orderEntry type="module" module-name="jet.as.java.psi" />
 +    <orderEntry type="module" module-name="frontend.xsd" />
    </component>
  </module>
  
 diff --git a/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java b/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
-index 5b27515..f2e0bbf 100644
+index 5b27515..2ccd6cd 100644
 --- a/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
 +++ b/idea/src/org/jetbrains/jet/plugin/compiler/JetCompiler.java
 @@ -12,6 +12,7 @@ import com.intellij.openapi.module.Module;
@@ -5800,7 +5789,7 @@ index 5b27515..f2e0bbf 100644
  import org.jetbrains.jet.lang.psi.JetFile;
  import org.jetbrains.jet.lang.resolve.BindingContext;
  import org.jetbrains.jet.lang.resolve.java.AnalyzerFacade;
-+import org.jetbrains.jet.lang.resolve.xsd2k.changers.XsdCommonChanger;
++import org.jetbrains.jet.lang.resolve.xsd2k.changers.XsdChanger;
  import org.jetbrains.jet.plugin.JetFileType;
  
 +import javax.swing.*;
@@ -5891,7 +5880,7 @@ index 5b27515..f2e0bbf 100644
 +                            @Override
 +                            public void run() {
 +                                for (final JetFile f : files[0]) {
-+                                    XsdCommonChanger visitor = new XsdCommonChanger(bindingContexts[0]);
++                                    XsdChanger visitor = new XsdChanger(bindingContexts[0]);
 +                                    f.accept(visitor);
 +                                    visitor.apply();
 +                                    String packageName = f.getNamespaceHeader().getName();
