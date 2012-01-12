@@ -46,6 +46,18 @@ index 99539cb..1c9d67b 100644
                      DiagnosticUtils.throwIfRunningOnServer(e);
                      if (ApplicationManager.getApplication().isInternal()) {
                          e.printStackTrace();
+diff --git a/compiler/frontend.java/frontend.java.iml b/compiler/frontend.java/frontend.java.iml
+index 5102197..f5aa63f 100644
+--- a/compiler/frontend.java/frontend.java.iml
++++ b/compiler/frontend.java/frontend.java.iml
+@@ -9,6 +9,7 @@
+     <orderEntry type="sourceFolder" forTests="false" />
+     <orderEntry type="module" module-name="frontend" />
+     <orderEntry type="module" module-name="stdlib" />
++    <orderEntry type="module" module-name="frontend.xsd" />
+   </component>
+ </module>
+ 
 diff --git a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java b/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java
 index d99e9a0..0b36fa6 100644
 --- a/compiler/frontend.java/src/org/jetbrains/jet/lang/resolve/java/AnalyzerFacade.java
@@ -159,10 +171,10 @@ index 0000000..9642b28
 +}
 diff --git a/compiler/frontend.xsd/frontend.xsd.iml b/compiler/frontend.xsd/frontend.xsd.iml
 new file mode 100644
-index 0000000..e90ce4e
+index 0000000..5e97eab
 --- /dev/null
 +++ b/compiler/frontend.xsd/frontend.xsd.iml
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,23 @@
 +<?xml version="1.0" encoding="UTF-8"?>
 +<module type="JAVA_MODULE" version="4">
 +  <component name="NewModuleRootManager" inherit-compiler-output="true">
@@ -182,6 +194,7 @@ index 0000000..e90ce4e
 +      </library>
 +    </orderEntry>
 +    <orderEntry type="module" module-name="frontend" />
++    <orderEntry type="module" module-name="frontend.java" />
 +  </component>
 +</module>
 +
@@ -5760,10 +5773,10 @@ index d542ea6..ca44e7d 100644
 +    }
  }
 diff --git a/idea/idea.iml b/idea/idea.iml
-index 061858a..9feed91 100644
+index ab661ef..3a9154d 100644
 --- a/idea/idea.iml
 +++ b/idea/idea.iml
-@@ -21,6 +21,7 @@
+@@ -22,6 +22,7 @@
      <orderEntry type="module" module-name="frontend.java" />
      <orderEntry type="module" module-name="stdlib" />
      <orderEntry type="module" module-name="compiler-tests" />
