@@ -12,7 +12,7 @@ import java.util.Set;
 public class Enum extends Class {
   public Enum(Identifier name, Set<String> modifiers, List<Element> typeParameters, List<Type> extendsTypes,
               List<Expression> baseClassParams, List<Type> implementsTypes, List<Member> members) {
-    super(name, modifiers, typeParameters, extendsTypes, baseClassParams, implementsTypes, members);
+    super(name, modifiers, typeParameters, extendsTypes, baseClassParams, implementsTypes, getMembers(members));
   }
 
   String primaryConstructorSignatureToKotlin() {
@@ -30,8 +30,8 @@ public class Enum extends Class {
   public String toKotlin() {
     return modifiersToKotlin() + "enum class" + SPACE + myName.toKotlin() + primaryConstructorSignatureToKotlin() +
       typeParametersToKotlin() + implementTypesToKotlin() + SPACE + "{" + N +
-      primaryConstructorBodyToKotlin() + N +
       AstUtil.joinNodes(membersExceptConstructors(), N) + N +
+      primaryConstructorBodyToKotlin() + N +
       "public fun name()  : String { return \"\" }" + N + // TODO : remove hack
       "public fun order() : Int { return 0 }" + N +
       "}";

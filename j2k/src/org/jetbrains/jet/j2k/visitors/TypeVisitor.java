@@ -3,6 +3,7 @@ package org.jetbrains.jet.j2k.visitors;
 import com.intellij.psi.*;
 import com.intellij.psi.impl.source.PsiClassReferenceType;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.jet.j2k.Converter;
 import org.jetbrains.jet.j2k.ast.*;
 import org.jetbrains.jet.j2k.util.AstUtil;
 
@@ -74,6 +75,8 @@ public class TypeVisitor extends PsiTypeVisitor<Type> {
     if (psiClass != null) {
       String qualifiedName = psiClass.getQualifiedName();
       if (qualifiedName != null) {
+        if (!qualifiedName.equals("java.lang.Object") && Converter.hasSetting("fqn"))
+          return new IdentifierImpl(qualifiedName);
         if (qualifiedName.equals(JAVA_LANG_ITERABLE))
           return new IdentifierImpl(JAVA_LANG_ITERABLE);
         if (qualifiedName.equals(JAVA_UTIL_ITERATOR))
@@ -116,8 +119,13 @@ public class TypeVisitor extends PsiTypeVisitor<Type> {
       if (resolve != null) {
         if (resolve instanceof PsiClass)
           //noinspection UnusedDeclaration
-          for (PsiTypeParameter p : ((PsiClass) resolve).getTypeParameters())
-            typeParams.add(new StarProjectionType());
+          for (PsiTypeParameter p : ((PsiClass) resolve).getTypeParameters()) {
+            Type boundType = p.getSuperTypes().length > 0 ?
+              new ClassType(new IdentifierImpl(getClassTypeName(p.getSuperTypes()[0])), typesToTypeList(p.getSuperTypes()[0].getParameters()), true) :
+              new StarProjectionType();
+
+            typeParams.add(boundType);
+          }
       }
     }
     return typeParams;

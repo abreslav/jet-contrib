@@ -6,12 +6,12 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.jet.j2k.ast.*;
 import org.jetbrains.jet.j2k.ast.Class;
 import org.jetbrains.jet.j2k.ast.Enum;
-import org.jetbrains.jet.j2k.ast.Modifier;
 import org.jetbrains.jet.j2k.util.AstUtil;
 import org.jetbrains.jet.j2k.visitors.*;
 
 import java.util.*;
 
+import static org.jetbrains.jet.j2k.ConverterUtil.countWritingAccesses;
 import static org.jetbrains.jet.j2k.ConverterUtil.createMainFunction;
 import static org.jetbrains.jet.j2k.visitors.TypeVisitor.*;
 
@@ -34,7 +34,18 @@ public class Converter {
   @Nullable
   private static PsiType ourMethodReturnType = null;
 
+  @NotNull
+  private static Set<String> settings = new HashSet<String>();
+
   private Converter() {
+  }
+
+  public static boolean addSetting(@NotNull String value) {
+    return settings.add(value);
+  }
+
+  public static boolean hasSetting(@NotNull String value) {
+    return settings.contains(value);
   }
 
   public static void setClassIdentifiers(@NotNull Set<String> identifiers) {
@@ -99,7 +110,7 @@ public class Converter {
     List<Member> members = new LinkedList<Member>();
     for (PsiElement e : psiClass.getChildren()) {
       if (e instanceof PsiMethod) members.add(methodToFunction((PsiMethod) e, true));
-      else if (e instanceof PsiField) members.add(fieldToField((PsiField) e));
+      else if (e instanceof PsiField) members.add(fieldToField((PsiField) e, psiClass));
       else if (e instanceof PsiClass) members.add(classToClass((PsiClass) e));
       else if (e instanceof PsiClassInitializer) members.add(initializerToInitializer((PsiClassInitializer) e));
       else if (e instanceof PsiMember) System.out.println(e.getClass() + " " + e.getText());
@@ -111,7 +122,7 @@ public class Converter {
   private static List<Field> getFinalOrWithEmptyInitializer(@NotNull List<? extends Field> fields) {
     List<Field> result = new LinkedList<Field>();
     for (Field f : fields)
-      if (f.isFinal() || f.getInitializer().toKotlin().isEmpty())
+      if (f.isVal() || f.getInitializer().toKotlin().isEmpty())
         result.add(f);
     return result;
   }
@@ -147,7 +158,7 @@ public class Converter {
   @NotNull
   private static Class classToClass(@NotNull PsiClass psiClass) {
     final Set<String> modifiers = modifiersListToModifiersSet(psiClass.getModifierList());
-    final List<Field> fields = fieldsToFieldList(psiClass.getFields());
+    final List<Field> fields = fieldsToFieldList(psiClass.getFields(), psiClass);
     final List<Element> typeParameters = elementsToElementList(psiClass.getTypeParameters());
     final List<Type> implementsTypes = typesToNotNullableTypeList(psiClass.getImplementsListTypes());
     final List<Type> extendsTypes = typesToNotNullableTypeList(psiClass.getExtendsListTypes());
@@ -260,14 +271,14 @@ public class Converter {
   }
 
   @NotNull
-  private static List<Field> fieldsToFieldList(@NotNull PsiField[] fields) {
+  private static List<Field> fieldsToFieldList(@NotNull PsiField[] fields, PsiClass psiClass) {
     List<Field> result = new LinkedList<Field>();
-    for (PsiField f : fields) result.add(fieldToField(f));
+    for (PsiField f : fields) result.add(fieldToField(f, psiClass));
     return result;
   }
 
   @NotNull
-  private static Field fieldToField(@NotNull PsiField field) {
+  private static Field fieldToField(@NotNull PsiField field, PsiClass psiClass) {
     Set<String> modifiers = modifiersListToModifiersSet(field.getModifierList());
     if (field instanceof PsiEnumConstant) // TODO: remove instanceof
       return new EnumConstant(
@@ -280,7 +291,8 @@ public class Converter {
       new IdentifierImpl(field.getName()), // TODO
       modifiers,
       typeToType(field.getType()),
-      createSureCallOnlyForChain(field.getInitializer(), field.getType()) // TODO: add modifiers
+      createSureCallOnlyForChain(field.getInitializer(), field.getType()), // TODO: add modifiers
+      countWritingAccesses(field, psiClass)
     );
   }
 
@@ -325,7 +337,7 @@ public class Converter {
 
     final IdentifierImpl identifier = new IdentifierImpl(method.getName());
     final Type returnType = typeToType(method.getReturnType(), ConverterUtil.isAnnotatedAsNotNull(method.getModifierList()));
-    final Block body = blockToBlock(method.getBody(), notEmpty);
+    final Block body = hasSetting("declarations-only") ? Block.EMPTY_BLOCK : blockToBlock(method.getBody(), notEmpty); // #TODO
     final Element params = createFunctionParameters(method);
     final List<Element> typeParameters = elementsToElementList(method.getTypeParameters());
 
@@ -606,10 +618,10 @@ public class Converter {
       for (PsiExpression e : arguments)
         actualTypes.add(e.getType());
 
-      assert actualTypes.size() == expectedTypes.size() : "The type list must have the same length";
-
-      for (int i = 0; i < actualTypes.size(); i++)
-        conversions.set(i, createConversionForExpression(arguments[i], expectedTypes.get(i)));
+      if (conversions.size() == actualTypes.size() && actualTypes.size() == expectedTypes.size()) {
+        for (int i = 0; i < actualTypes.size(); i++)
+          conversions.set(i, createConversionForExpression(arguments[i], expectedTypes.get(i)));
+      }
     }
     return conversions;
   }
