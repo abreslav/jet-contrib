@@ -70,15 +70,15 @@
 <body spellcheck="false" onResize="resizeCentral();"
       onload="onBodyLoad();">
 
-<div id="toolbox" style="display:none">
+<!--<div id="toolbox" style="display:none">
     <div align="center">
         <div class="fixedpage">
             This is a public link to your program: <span id="publicLinkHref"></span>
-            <!--<img src="icons/closePopup.png">-->
-            <!--<span class="ui-icon-circle-close close ui-icon" title="Close popup">    </span>-->
+            &lt;!&ndash;<img src="icons/closePopup.png">&ndash;&gt;
+            &lt;!&ndash;<span class="ui-icon-circle-close close ui-icon" title="Close popup">    </span>&ndash;&gt;
         </div>
     </div>
-</div>
+</div>-->
 <div id="loader">
     <img src="/images/loading2.png"/>
 </div>
@@ -94,12 +94,19 @@
                     Kotlin Web Demo<span id="kotlinVersionTop"></span>
                 </td>
                 <td id="headerlinks">
-                                <div id="userName"></div>
-                            <a target="_blank"
-                               href="http://confluence.jetbrains.net/display/Kotlin/Welcome">Documentation</a>
-                            <a target="_blank" href="http://youtrack.jetbrains.net/issues/KT">BugTracker</a>
-                            <a target="_blank" href="http://blog.jetbrains.com/kotlin/">Blog</a>
-                            <a target="_blank" href="https://twitter.com/#!/project_kotlin">Twitter</a>
+                    <div id="userName"></div>
+                    <div id="login" height="20">
+                        <b>Log in:</b>
+                        <a href="#" onclick="beforeLogin('twitter');"><img src="/images/social/twitter.png"/></a>
+                        <a href="#" onclick="beforeLogin('facebook');"><img src="/images/social/facebook.png"/></a>
+                        <a href="#" onclick="beforeLogin('google');"><img src="/images/social/google.png"/></a>
+                    </div>
+                    <a target="_blank"
+                       href="http://confluence.jetbrains.net/display/Kotlin/Welcome">Documentation</a>
+                    <a target="_blank" href="http://youtrack.jetbrains.net/issues/KT">BugTracker</a>
+                    <a target="_blank" href="http://blog.jetbrains.com/kotlin/">Blog</a>
+                    <a target="_blank" href="https://twitter.com/#!/project_kotlin">Twitter</a>
+
                 </td>
                 <td id="jetbrainslogo">
                     <a target="_blank" href="http://jetbrains.com"><img src="/images/jblogo.png" id="jblogo"
@@ -140,9 +147,7 @@
             <div id="centralcontent">
                 <div id="editordiv">
                     <div id="editorinput" tabindex="0">
-                        <form><textarea class="CodeMirror" id="code" name="code">fun main(args : Array&lt;String&gt;) {
-  System.out?.println("Hello, world!")
-}</textarea>
+                        <form><textarea class="CodeMirror" id="code" name="code"></textarea>
                         </form>
                     </div>
                 </div>
@@ -172,14 +177,7 @@
             <!--<div class="titleHeader">
                 <div>Login</div>
             </div>-->
-            <div class="helpcontent">
-                <div id="login" height="20">
-                    <b>Login:</b>
-                    <a href="#" onclick="login('twitter');"><img src="/images/social/twitter.png"/></a>
-                    <a href="#" onclick="login('facebook');"><img src="/images/social/facebook.png"/></a>
-                    <a href="#" onclick="login('google');"><img src="/images/social/google.png"/></a>
-                </div>
-            </div>
+
             <div class="titleHeader">
                 <div id="refreshTitle">Type checking</div>
                 <div id="refreshImg">
@@ -299,26 +297,52 @@
 </div>
 
 <div id="saveDialog" title="Save your program">
-
-    <form onsubmit="saveAs();">
+    <form action="javascript:void(0);" onsubmit="saveAs();">
         Save as: <input id="programName"/>
     </form>
 </div>
 
-<link type="text/css" href="/jquery/development-bundle/themes/smoothness/jquery.ui.selectmenu.css" rel="stylesheet" />
+<div id="showInfoAboutLoginDialog" title="Help">
+    <p>You can save and share your programs.</p>
+    <!--<img src="/images/login.png"/>-->
+    <div id="loginInPopup" height="20" style="display: block;">
+        <b>Log in to enable "My Programs": </b>
+        <a onclick="beforeLogin('google');" href="#">
+            <img src="/images/social/google.png"/>
+        </a>
+        <a onclick="beforeLogin('facebook');" href="#">
+            <img src="/images/social/facebook.png"/>
+        </a>
+        <a onclick="beforeLogin('twitter');" href="#">
+            <img src="/images/social/twitter.png"/>
+        </a>
+    </div>
+</div>
+
+<div id="confirmDialog" title="Save your program">
+    Do you want to save your changes?
+</div>
+
+<link type="text/css" href="/jquery/development-bundle/themes/smoothness/jquery.ui.selectmenu.css" rel="stylesheet"/>
 
 <script type="text/javascript" src="/jquery/development-bundle/ui/jquery.ui.selectmenu.js"></script>
 
 <script src="/components/common.js"></script>
 <script src="/components/help.js"></script>
 <script src="/components/components.js"></script>
+<script src="/components/accordion.js"></script>
 
 <script src="/codemirror/lib/complete.js"></script>
 <applet id="myapplet" code="org.jetbrains.demo.ukhorskaya.MainApplet" width="0" height="0"
-        ARCHIVE="WebViewApplet01232012.jar" style="display: none;">
+        ARCHIVE="WebViewApplet01302012.jar" style="display: none;">
 </applet>
 <applet id="jsapplet" code="org.jetbrains.k2js.K2JSTranslatorApplet" width="0" height="0"
-        ARCHIVE="WebViewApplet01232012.jar" style="display: none;"></applet>
+        ARCHIVE="WebViewApplet01302012.jar" style="display: none;"></applet>
+<!--<applet id="myapplet" code="org.jetbrains.demo.ukhorskaya.MainApplet" width="0" height="0"
+        ARCHIVE="WebViewApplet.jar" style="display: none;">
+</applet>
+<applet id="jsapplet" code="org.jetbrains.k2js.K2JSTranslatorApplet" width="0" height="0"
+        ARCHIVE="WebViewApplet.jar" style="display: none;"></applet>-->
 
 <!--
 <applet id="myapplet" code="org.jetbrains.demo.ukhorskaya.MainApplet" width="0" height="0"
@@ -327,8 +351,6 @@
 <applet id="jsapplet" code="org.jetbrains.k2js.K2JSTranslatorApplet" width="0" height="0"
         ARCHIVE="http://dl.dropbox.com/u/56547825/WebViewApplet.jar/WebViewApplet.jar, rt.jar"></applet>
 -->
-
-
 
 
 </body>

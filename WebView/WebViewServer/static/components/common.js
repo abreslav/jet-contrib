@@ -13,11 +13,12 @@ var COMPLETE_REQUEST_ABORTED = "Can't get completion proposal list from server."
 var EXAMPLES_REQUEST_ABORTED = "Can't get the example code from server.";
 var SAVE_PROGRAM_REQUEST_ABORTED = "Can't save the program on server.";
 var DELETE_PROGRAM_REQUEST_ABORTED = "Can't delete the program from server.";
+var PUBLIC_LINK_REQUEST_ABORTED = "Can't geerate the public link for program.";
 var HELP_REQUEST_ABORTED = "Can't get help from server.";
 //Message in popup with warning before close tab with editor
 //var BEFORE_EXIT = "The changes you made to the program will be lost when this page is closed. Do you want to close the page?";
 var BEFORE_EXIT = "The changes you made to the program will be lost when you change an example. Do you want to leave the page?";
-var BEFORE_DELETE_PROGRAM = "Do you really want to delete a program?";
+var BEFORE_DELETE_PROGRAM = "Do you really want to delete the program?";
 var ERROR_UNTIL_EXECUTE = "Your program has terminated with an exception.";
 var TRY_RUN_CODE_WITH_ERROR = "Can't run a program with errors. See the Problems View tab.";
 var EXECUTE_OK = "Compilation competed successfully.";
@@ -52,15 +53,30 @@ $(document).keydown(function (e) {
             $("#runJS").click();
         } else if (e.keyCode == 82 && e.ctrlKey) {
             $("#run").click();
+        } else if (e.keyCode == 83 && e.metaKey) {
+            stopKeydown(e);
+            save();
         }
     } else {
         if (e.keyCode == 120 && e.ctrlKey && e.shiftKey) {
             $("#runJS").click();
         } else if (e.keyCode == 120 && e.ctrlKey) {
             $("#run").click();
+        } else if (e.keyCode == 83 && e.ctrlKey) {
+            stopKeydown(e);
+            save();
         }
     }
 });
+
+function stopKeydown(e) {
+    e_preventDefault(e);
+}
+
+function e_preventDefault(e) {
+    if (e.preventDefault) e.preventDefault();
+    else e.returnValue = false;
+}
 
 
 function onBodyLoad() {
@@ -74,15 +90,13 @@ function onBodyLoad() {
             document.getElementById("help3").innerHTML = text.replace("F9", "R");
             document.getElementById("run").title = document.getElementById("run").title.replace("F9", "R");
             document.getElementById("runJS").title = document.getElementById("runJS").title.replace("F9", "R");
+            document.getElementById("saveProgram").title = document.getElementById("saveProgram").title.replace("Ctrl", "Cmd");
         }
 
         $("#help3").toggle(true);
         setSessionId();
         resizeCentral();
-        setKotlinVersion('0.1.226');
-        loadAccordionContent();
-        loadHelpContentForExamples();
-        hideLoader();
+        setKotlinVersion('0.1.386');
     }
 }
 
@@ -111,6 +125,7 @@ function logout() {
             isLogin = false;
             document.getElementById("login").style.display = "block";
             document.getElementById("userName").innerHTML = "";
+            document.getElementById("userName").style.display = "none";
         }
     });
 
@@ -124,29 +139,42 @@ function getSessionIdSuccess(data) {
     if (data[1] != null && data[1] != '') {
         userName = data[1];
         /*if (loginImages == "") {
-            loginImages = document.getElementById("userName").innerHTML;
-        }*/
+         loginImages = document.getElementById("userName").innerHTML;
+         }*/
         if (userName != "") {
             document.getElementById("login").style.display = "none";
+            document.getElementById("userName").style.display = "block";
             isLogin = true;
             userName = decodeURI(userName);
             userName = userName.replace(new RegExp('\\+', 'g'), ' ');
 
-//            document.getElementById("userName").innerHTML = "<b>" + userName + "</b>";
-            document.getElementById("userName").innerHTML = "<select id=\"userNameSelect\" ><option value='"+ userName + "'>" + userName + "</option><option value='Logout'>Logout</option></select>";
-            $("#userNameSelect").selectmenu({
-                width: 245,
-                style:'popup',
-                select: function() {
-                    if (this.value == "Logout") {
-                        logout();
-                    }
-                }
-            });
+            document.getElementById("userName").innerHTML = "<div id='userNameTitle'><span>Welcome, " + userName + "</span><img src='/images/toogleShortcutsOpen.png' id='userNameImg'/></div>";
+//            document.getElementById("userName").innerHTML = "<span>" + userName + "</span><img src='/images/toogleShortcutsOpen.png' id='userNameImg'/>";
+            document.getElementById("userNameTitle").onclick = function (e) {
+                userNameClick(e);
+            };
+
+            /* document.getElementById("userName").innerHTML = "<select id=\"userNameSelect\" ><option value='"+ userName + "'>" + userName + "</option><option value='Logout'>Logout</option></select>";
+             $("#userNameSelect").selectmenu({
+             width: 245,
+             style:'popup',
+             select: function() {
+             if (this.value == "Logout") {
+             logout();
+             }
+             }
+             });*/
         }
+
     }
+
+    loadAccordionContent();
+    loadHelpContentForExamples();
+    hideLoader();
+
     var info = "browser: " + navigator.appName + " " + navigator.appVersion;
     info += " " + "system: " + navigator.platform;
+
     $.ajax({
         url:generateAjaxUrl("sendUserData", "null"),
         context:document.body,
@@ -200,8 +228,8 @@ function setConsoleMessage(message) {
     document.getElementById("console").innerHTML = message;
 }
 
-
-/*var hashLoc = location.hash;
+/*
+ *//*var hashLoc = location.hash;
  window.addEventListener("unload", beforeUnload, true);
 
 
@@ -211,21 +239,21 @@ function setConsoleMessage(message) {
  history.back();
  }
  }
- }*/
+ }*//*
 
-/*document.unload = function () {
+ *//*document.unload = function () {
  if (confirm(BEFORE_EXIT)) {
  history.back();
  }
- };*/
+ };*//*
 
-function beforeBack() {
-    if (isContentEditorChanged && confirm(BEFORE_EXIT)) {
-        history.back();
-    }
-    isContentEditorChanged = false;
-//    bajb_backdetect.OnBack = beforeBack();
-}
+ function beforeBack() {
+ if (isContentEditorChanged && confirm(BEFORE_EXIT)) {
+ history.back();
+ }
+ isContentEditorChanged = false;
+ //    bajb_backdetect.OnBack = beforeBack();
+ }*/
 
 
 //bajb_backdetect.OnBack = beforeBack;
@@ -254,6 +282,18 @@ function generateAjaxUrl(type, args) {
     return url + "kotlinServer?sessionId=" + sessionId + "&type=" + type + "&args=" + args;
 }
 
+function beforeLogin(param) {
+    if (isContentEditorChanged) {
+        confirmAction(function (param) {
+            return function () {
+                login(param);
+            }
+        }(param));
+    } else {
+        login(param);
+    }
+}
+
 function login(param) {
     $.ajax({
         url:generateAjaxUrl("authorization", param),
@@ -270,14 +310,82 @@ function login(param) {
 }
 
 function onLoginSuccess(data) {
-    <!-- Codes by Quackit.com -->
-    // Popup window code
-//        window.open(
-//            data,'popUpWindow','height=700,width=800,left=10,top=10,resizable=yes,scrollbars=yes,toolbar=yes,menubar=no,location=no,directories=no,status=yes');
-
-//    window.open(data);
     document.location.href = data;
 }
+
+function showConfirmDialog(fun) {
+
+    $("#confirmDialog").dialog({
+        buttons:[
+            { text:"Save changes",
+                click:function () {
+                    save();
+                    closeConfirmDialog();
+                }
+            },
+            { text:"Discard changes",
+                click:function () {
+                    closeConfirmDialog();
+                    fun();
+                }
+            },
+            { text:"Cancel",
+                click:function () {
+                    closeConfirmDialog();
+                }
+            }
+        ]
+    });
+
+    $("#confirmDialog").dialog("open");
+    if (!isLogin) {
+        $(":button:contains('Save changes')").attr("disabled", "disabled").addClass("ui-state-disabled");
+    }
+}
+
+
+function closeConfirmDialog() {
+    $("#confirmDialog").dialog("close");
+}
+
+function confirmAction(fun) {
+    showConfirmDialog(fun);
+}
+
+function getNameByUrl(url) {
+    /*var pos = url.indexOf("&folder=");
+     if (pos != -1) {
+     return url.substring(0, pos);
+     }
+     return "";*/
+    var pos = url.indexOf("&name=");
+    if (pos != -1) {
+        return url.substring(pos + 6);
+
+    }
+    return "";
+}
+
+function getFolderNameByUrl(url) {
+    /* var pos = url.indexOf("&folder=");
+     if (pos != -1) {
+     return url.substring(pos + 8);
+     }
+     return "";*/
+    var pos = url.indexOf("&name=");
+    if (pos != -1) {
+        return url.substring(0, pos);
+    }
+    return "";
+}
+
+function createExampleUrl(name, folder) {
+    return folder.replace(new RegExp(" ", 'g'), "_") + "&name=" + name.replace(new RegExp(" ", 'g'), "_");
+    //return name.replace(new RegExp(" ", 'g'), "_") + "&folder=" + folder.replace(new RegExp(" ", 'g'), "_");
+}
+
+
+
 
 
 

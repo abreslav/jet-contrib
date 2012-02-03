@@ -35,6 +35,16 @@ public class ExamplesLoader {
         return "[{\"text\":\"Cannot find this example. Please choose another example.\"}]";
     }
 
+    public String getResultByNameAndHead(String param) {
+        String name = ResponseUtils.getExampleOrProgramNameByUrl(param);
+        String folder = ResponseUtils.getExampleOrProgramFolderByUrl(param);
+        Pair<Integer, String> pair = ExamplesList.getInstance().findExampleByNameAndHead(name, folder);
+        if (pair != null) {
+            return getResult(pair.first, pair.second);
+        }
+        return "[{\"text\":\"Cannot find this example. Please choose another example.\"}]";
+    }
+
     public String getResult(int id, String headName) {
         Map<String, String> fileObj = ExamplesList.getInstance().getMapFromList(id);
         if (!fileObj.get("type").equals("content")) {
@@ -42,7 +52,7 @@ public class ExamplesLoader {
             return "[{\"text\":\"Cannot find this example. Please choose another example.\"}]";
         }
         String fileName = fileObj.get("text");
-        headName = headName.replaceAll("%20", " ");
+        headName = headName.replaceAll("_", " ");
         File example = new File(ServerSettings.EXAMPLES_ROOT + File.separator + headName + File.separator + fileName + ".kt");
         if (!example.exists()) {
             ErrorWriterOnServer.LOG_FOR_EXCEPTIONS.error("Cannot find example with file name: " + example.getAbsolutePath());
