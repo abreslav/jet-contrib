@@ -99,7 +99,7 @@ $(document).ready(function () {
 //            document.getElementById("debug").innerHTML = " " + (new Date().getMilliseconds() - time);
             var i = editor.getValue();
             $.ajax({
-                url: generateAjaxUrl("highlight", "null"),
+                url:generateAjaxUrl("highlight", "null"),
                 context:document.body,
                 success:onHighlightingSuccess,
                 dataType:"json",
@@ -195,6 +195,8 @@ $(document).ready(function () {
         processError(i, problems, processError);
     }
 
+    var isFirstTryToLoadApplet = true;
+
     function getDataFromApplet(type) {
         var i = editor.getValue();
         try {
@@ -206,31 +208,50 @@ $(document).ready(function () {
                     dataFromApplet = $("#myapplet")[0].getHighlighting(i);
                 }
             } catch (e) {
-                $(".applet-disable").click();
-                setStatusBarError(GET_FROM_APPLET_FAILED);
-
-                var title = document.getElementById("appletclient").title;
-                if (title.indexOf(GET_FROM_APPLET_FAILED) == -1) {
-                    document.getElementById("appletclient").title += ". " + GET_FROM_APPLET_FAILED;
-                }
-                $(".applet-enable").click(function () {
-                    try {
-                        $("#myapplet")[0].getHighlighting("");
-                        var title = document.getElementById("appletclient").title;
-                        var pos = title.indexOf(GET_FROM_APPLET_FAILED)
-                        if (pos != -1) {
-                            title = title.substring(0, pos);
-                            document.getElementById("appletclient").title = title;
-                        }
-                    } catch (e) {
-                        $(".applet-disable").click();
+//                alert(e);
+                if ((e.indexOf("getHighlighting") > 0) || e.indexOf("getCompletion") > 0) {
+                    var is_chrome = navigator.userAgent.toLowerCase().indexOf('chrome') > -1;
+                    if (is_chrome && isFirstTryToLoadApplet) {
+                        isFirstTryToLoadApplet = false;
+                        setTimeout(function () {
+                            getDataFromApplet(type);
+                        }, 3000);
+                        return;
                     }
-                });
+                    $(".applet-nohighlighting").click();
+                    setStatusBarError(GET_FROM_APPLET_FAILED);
 
-                if (type == "highlighting") {
-                    isLoadingHighlighting = false;
-                    getErrors();
+                    var title = document.getElementById("appletclient").title;
+                    if (title.indexOf(GET_FROM_APPLET_FAILED) == -1) {
+                        document.getElementById("appletclient").title += ". " + GET_FROM_APPLET_FAILED;
+                    }
+                    /*$(".applet-enable").click(function () {
+                     try {
+                     $("#myapplet")[0].getHighlighting("");
+                     var title = document.getElementById("appletclient").title;
+                     var pos = title.indexOf(GET_FROM_APPLET_FAILED)
+                     if (pos != -1) {
+                     title = title.substring(0, pos);
+                     document.getElementById("appletclient").title = title;
+                     }
+                     } catch (e) {
+                     $(".applet-disable").click();
+                     }
+                     });
+
+                     if (type == "highlighting") {
+                     isLoadingHighlighting = false;
+                     //getErrors();
+                     }*/
+                } else {
+                    if (type == "complete") {
+                        setStatusBarError(COMPLETE_REQUEST_ABORTED);
+                    } else {
+                        setStatusBarError(HIGHLIGHT_REQUEST_ABORTED);
+                    }
+
                 }
+
                 return;
             }
             var data = eval(dataFromApplet);
@@ -361,7 +382,7 @@ $(document).ready(function () {
                 var i = editor.getValue();
                 var arguments = $("#arguments").val();
                 $.ajax({
-                    url: generateAjaxUrl("run", "null"),
+                    url:generateAjaxUrl("run", "null"),
                     context:document.body,
                     success:onCompileSuccess,
                     dataType:"json",
@@ -407,7 +428,7 @@ $(document).ready(function () {
     function sendHighlightingRequest(onLoad) {
         var i = editor.getValue();
         $.ajax({
-            url: generateAjaxUrl("highlight", "null"),
+            url:generateAjaxUrl("highlight", "null"),
             context:document.body,
             success:onLoad,
             dataType:"json",
@@ -475,7 +496,7 @@ $(document).ready(function () {
     function loadJsFromServer(i, arguments) {
         isJsApplet = false;
         $.ajax({
-            url: generateAjaxUrl("convertToJs", "null"),
+            url:generateAjaxUrl("convertToJs", "null"),
             context:document.body,
             success:onConvertToJsSuccess,
             dataType:"json",
@@ -578,7 +599,12 @@ $(document).ready(function () {
         var img = document.createElement("img");
         if (severity == 'WARNING') {
             img.src = "/icons/warning.png";
-            p.className = "problemsViewWarning";
+            if (title.indexOf("is never used") > 0) {
+                p.className = "problemsViewWarningNeverUsed";
+            } else {
+                p.className = "problemsViewWarning";
+            }
+
         } else if (severity == 'STACKTRACE') {
             p.className = "problemsViewStacktrace";
         } else {
@@ -612,7 +638,7 @@ $(document).ready(function () {
                 isCompletionInProgress = false;
             } else {
                 $.ajax({
-                    url: generateAjaxUrl("complete", editor.getCursor(true).line + "," + editor.getCursor(true).ch),
+                    url:generateAjaxUrl("complete", editor.getCursor(true).line + "," + editor.getCursor(true).ch),
                     context:document.body,
                     success:startComplete,
                     dataType:"json",

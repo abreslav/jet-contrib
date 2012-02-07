@@ -94,6 +94,10 @@ public class CommandRunner {
             ServerSettings.MYSQL_USERNAME = ResponseUtils.substringAfter(setting, "mysql_username ");
         } else if (setting.startsWith("mysql_password")) {
             ServerSettings.MYSQL_PASSWORD = ResponseUtils.substringAfter(setting, "mysql_password ");
+        } else if (setting.startsWith("auth_redirect")) {
+            ServerSettings.AUTH_REDIRECT = ResponseUtils.substringAfter(setting, "auth_redirect ");
+        }  else if (setting.startsWith("is_test_version")) {
+            ServerSettings.IS_TEST_VERSION = ResponseUtils.substringAfter(setting, "is_test_version ");
         } else {
             ErrorWriter.writeErrorToConsole("Incorrect setting in config.properties file: " + setting);
         }

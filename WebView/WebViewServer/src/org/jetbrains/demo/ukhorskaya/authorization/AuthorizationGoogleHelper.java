@@ -4,6 +4,8 @@ import org.jetbrains.annotations.Nullable;
 import org.jetbrains.demo.ukhorskaya.ErrorWriter;
 import org.jetbrains.demo.ukhorskaya.ErrorWriterOnServer;
 import org.jetbrains.demo.ukhorskaya.ResponseUtils;
+import org.jetbrains.demo.ukhorskaya.server.ServerSettings;
+import org.jetbrains.demo.ukhorskaya.session.SessionInfo;
 import org.jetbrains.demo.ukhorskaya.session.UserInfo;
 import org.jetbrains.demo.ukhorskaya.handlers.ServerHandler;
 import org.json.JSONObject;
@@ -37,13 +39,14 @@ public class AuthorizationGoogleHelper extends AuthorizationHelper {
                     .apiKey("anonymous")
                     .apiSecret("anonymous")
                     .scope(SCOPE)
-                    .callback("http://" + ServerHandler.HOST + ResponseUtils.generateRequestString("authorization", "google"))
+                    .callback("http://" + ServerSettings.AUTH_REDIRECT + ResponseUtils.generateRequestString("authorization", "google"))
                     .build();
 
             requestToken = googleService.getRequestToken();
             return googleService.getAuthorizationUrl(requestToken);
         } catch (Throwable e) {
-            ErrorWriterOnServer.LOG_FOR_EXCEPTIONS.error(ErrorWriter.getExceptionForLog("Cannot authorize authorization request", e, "null"));
+            ErrorWriter.ERROR_WRITER.writeExceptionToExceptionAnalyzer(e, SessionInfo.TypeOfRequest.AUTHORIZATION.name(), "google");
+//            ErrorWriterOnServer.LOG_FOR_EXCEPTIONS.error(ErrorWriter.getExceptionForLog("Cannot authorize authorization request", e, "null"));
         }
         return "";
     }
@@ -64,7 +67,8 @@ public class AuthorizationGoogleHelper extends AuthorizationHelper {
             userInfo.login((String) object.get("name"), (String) object.get("id"), TYPE);
 
         } catch (Throwable e) {
-            ErrorWriterOnServer.LOG_FOR_EXCEPTIONS.error(ErrorWriter.getExceptionForLog("Cannot verify authorization request", e, url));
+            ErrorWriter.ERROR_WRITER.writeExceptionToExceptionAnalyzer(e, SessionInfo.TypeOfRequest.AUTHORIZATION.name(), "google: " + url);
+//            ErrorWriterOnServer.LOG_FOR_EXCEPTIONS.error(ErrorWriter.getExceptionForLog("Cannot verify authorization request", e, url));
         }
         return userInfo;
     }
